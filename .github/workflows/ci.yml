@@ -87,8 +87,6 @@ jobs:
       - name: Deploy to Cloud Run
         if: steps.check-creds.outputs.has_creds == 'true'
         run: |
-          gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com || true
-
           SECRET_ARGS=""
           if gcloud secrets describe GEMINI_API_KEY >/dev/null 2>&1; then
             SECRET_ARGS="--set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest"
