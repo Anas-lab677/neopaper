@@ -34,3 +34,9 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Credentials and GCP keys
+*key*.json
+*credentials*.json
+delta-*.json
+gcp*.json

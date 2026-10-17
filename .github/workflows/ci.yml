@@ -62,8 +62,10 @@ jobs:
 
       - name: Check Cloud Run Credentials
         id: check-creds
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          if [ -n "${{ secrets.GCP_SA_KEY }}" ]; then
+          if [ -n "$GCP_SA_KEY" ]; then
             echo "has_creds=true" >> $GITHUB_OUTPUT
             echo "Google Cloud deployment credentials found."
           else
@@ -85,10 +87,18 @@ jobs:
       - name: Deploy to Cloud Run
         if: steps.check-creds.outputs.has_creds == 'true'
         run: |
+          SECRET_ARGS=""
+          if gcloud secrets describe GEMINI_API_KEY >/dev/null 2>&1; then
+            SECRET_ARGS="--set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest"
+          elif [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
+            SECRET_ARGS="--set-env-vars GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+          fi
+
           gcloud run deploy daybreak \
             --source . \
             --region asia-southeast1 \
             --platform managed \
             --allow-unauthenticated \
             --set-env-vars NODE_ENV=production \
-            --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
+            $SECRET_ARGS
+
