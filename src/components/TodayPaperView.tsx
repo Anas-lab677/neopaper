@@ -293,37 +293,55 @@ export const TodayPaperView: React.FC<TodayPaperViewProps> = ({
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onToggleSave(leadStory); }}
-                    className={`p-1.5 rounded transition-colors ${
-                      savedItemIds.has(leadStory.id) || savedItemIds.has(leadStory.articleId)
-                        ? 'text-[#8C2D19] bg-[#8C2D19]/10'
-                        : 'text-[#78716C] hover:text-[#1C1917]'
-                    }`}
-                    title="Bookmark story"
-                  >
-                    <Bookmark className="w-4 h-4" fill={savedItemIds.has(leadStory.id) || savedItemIds.has(leadStory.articleId) ? 'currentColor' : 'none'} />
-                  </button>
+                  {(() => {
+                    const isLeadSaved = Boolean(
+                      (leadStory.id && savedItemIds.has(leadStory.id)) ||
+                      (leadStory.articleId && savedItemIds.has(leadStory.articleId))
+                    );
+                    const isLeadLiked = Boolean(
+                      (leadStory.articleId && likedItemIds.has(leadStory.articleId)) ||
+                      (leadStory.id && likedItemIds.has(leadStory.id))
+                    );
+                    const isLeadDisliked = Boolean(
+                      (leadStory.articleId && dislikedItemIds.has(leadStory.articleId)) ||
+                      (leadStory.id && dislikedItemIds.has(leadStory.id))
+                    );
+                    return (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onToggleSave(leadStory); }}
+                          className={`p-1.5 rounded transition-colors ${
+                            isLeadSaved
+                              ? 'text-[#8C2D19] bg-[#8C2D19]/10'
+                              : 'text-[#78716C] hover:text-[#1C1917]'
+                          }`}
+                          title="Bookmark story"
+                        >
+                          <Bookmark className="w-4 h-4" fill={isLeadSaved ? 'currentColor' : 'none'} />
+                        </button>
 
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onLikeStory(leadStory); }}
-                    className={`p-1.5 rounded transition-colors ${
-                      likedItemIds.has(leadStory.articleId) ? 'text-green-700 bg-green-50 animate-like-pop' : 'text-[#78716C] hover:text-[#1C1917]'
-                    }`}
-                    title="More like this"
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5" fill={likedItemIds.has(leadStory.articleId) ? 'currentColor' : 'none'} />
-                  </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onLikeStory(leadStory); }}
+                          className={`p-1.5 rounded transition-colors ${
+                            isLeadLiked ? 'text-green-700 bg-green-50 animate-like-pop' : 'text-[#78716C] hover:text-[#1C1917]'
+                          }`}
+                          title="More like this"
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" fill={isLeadLiked ? 'currentColor' : 'none'} />
+                        </button>
 
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDislikeStory(leadStory); }}
-                    className={`p-1.5 rounded transition-colors ${
-                      dislikedItemIds.has(leadStory.articleId) ? 'text-red-700 bg-red-50 animate-like-pop' : 'text-[#78716C] hover:text-[#1C1917]'
-                    }`}
-                    title="Fewer like this"
-                  >
-                    <ThumbsDown className="w-3.5 h-3.5" fill={dislikedItemIds.has(leadStory.articleId) ? 'currentColor' : 'none'} />
-                  </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onDislikeStory(leadStory); }}
+                          className={`p-1.5 rounded transition-colors ${
+                            isLeadDisliked ? 'text-red-700 bg-red-50 animate-like-pop' : 'text-[#78716C] hover:text-[#1C1917]'
+                          }`}
+                          title="Fewer like this"
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" fill={isLeadDisliked ? 'currentColor' : 'none'} />
+                        </button>
+                      </>
+                    );
+                  })()}
 
                   <button
                     onClick={(e) => { e.stopPropagation(); onSkipItem(leadStory); }}
@@ -350,9 +368,18 @@ export const TodayPaperView: React.FC<TodayPaperViewProps> = ({
           {/* SECONDARY STORIES GRID (Sketch 2) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {secondaryStories.map((item: EditionItem, idx: number) => {
-              const isSaved = savedItemIds.has(item.id) || savedItemIds.has(item.articleId);
-              const isLiked = likedItemIds.has(item.articleId);
-              const isDisliked = dislikedItemIds.has(item.articleId);
+              const isSaved = Boolean(
+                (item.id && savedItemIds.has(item.id)) ||
+                (item.articleId && savedItemIds.has(item.articleId))
+              );
+              const isLiked = Boolean(
+                (item.articleId && likedItemIds.has(item.articleId)) ||
+                (item.id && likedItemIds.has(item.id))
+              );
+              const isDisliked = Boolean(
+                (item.articleId && dislikedItemIds.has(item.articleId)) ||
+                (item.id && dislikedItemIds.has(item.id))
+              );
 
               return (
                 <article

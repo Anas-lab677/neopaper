@@ -83,7 +83,12 @@ export function OnboardingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C1917]/50 animate-in fade-in duration-150"
+    >
       <div className="relative w-full max-w-lg mx-4 bg-[#FAF9F6] rounded-xl shadow-2xl border border-[#E7E5E4] overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E7E5E4]">

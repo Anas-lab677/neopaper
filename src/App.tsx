@@ -221,17 +221,26 @@ export default function App() {
               onboardingCompleted: false,
               createdAt: new Date().toISOString(),
             };
-            await saveUserProfileToFirestore(currentUser.uid, userProf);
-            setShowOnboarding(true);
-
-            await fetch('/api/profile', {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify(userProf),
+            saveUserProfileToFirestore(currentUser.uid, userProf).catch((fsErr) => {
+              console.warn('[Auth] Firestore profile init skipped (unprovisioned):', fsErr);
             });
+
+            try {
+              await fetch('/api/profile', {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(userProf),
+              });
+            } catch (e) {
+              console.warn('[Auth] Backend profile sync failed:', e);
+            }
+
+            if (!userProf.onboardingCompleted) {
+              setShowOnboarding(true);
+            }
           }
 
           setProfile(userProf);
@@ -323,11 +332,15 @@ export default function App() {
   // Toggle bookmark save
   const handleToggleSave = async (item: any) => {
     const itemId = item.id || item.articleId;
-    const isCurrentlySaved = savedItemIds.has(itemId) || savedItemIds.has(item.articleId);
+    const articleId = item.articleId || item.id;
+    const isCurrentlySaved = Boolean(
+      (item.id && savedItemIds.has(item.id)) ||
+      (item.articleId && savedItemIds.has(item.articleId))
+    );
 
     const editionItem: EditionItem = {
       id: item.id || `art-${Date.now()}`,
-      articleId: item.articleId || item.id,
+      articleId: articleId,
       sortOrder: item.sortOrder || 1,
       section: item.section || item.topic || 'World',
       headline: item.headline,
@@ -343,20 +356,28 @@ export default function App() {
     if (isCurrentlySaved) {
       setSavedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(itemId);
-        next.delete(editionItem.articleId);
+        if (item.id) next.delete(item.id);
+        if (item.articleId) next.delete(item.articleId);
         return next;
       });
-      setSavedList(prev => prev.filter(s => s.articleId !== editionItem.articleId && s.id !== itemId));
+      setSavedList(prev => prev.filter(s => {
+        const matchId = Boolean(item.id && (s.id === item.id || s.item?.id === item.id));
+        const matchArtId = Boolean(item.articleId && (s.articleId === item.articleId || s.item?.articleId === item.articleId));
+        return !(matchId || matchArtId);
+      }));
       showToast('Removed from saved stories.');
       if (user) {
         removeStoryFromFirestore(user.uid, itemId).catch(fsErr => {
           console.warn('[Storage] Firestore cloud remove timed out/failed:', fsErr);
-          showToast('⚠️ Removed from session; Firestore cloud write timed out.');
         });
       }
     } else {
-      setSavedItemIds(prev => new Set([...prev, itemId, editionItem.articleId]));
+      setSavedItemIds(prev => {
+        const next = new Set(prev);
+        if (item.id) next.add(item.id);
+        if (item.articleId) next.add(item.articleId);
+        return next;
+      });
       const newRecord: SavedArticleRecord = {
         id: itemId,
         userId: user ? user.uid : 'guest',
@@ -364,12 +385,11 @@ export default function App() {
         item: editionItem,
         savedAt: new Date().toISOString(),
       };
-      setSavedList(prev => [newRecord, ...prev]);
+      setSavedList(prev => [newRecord, ...prev.filter(s => s.id !== itemId && s.articleId !== editionItem.articleId)]);
       showToast('Saved to your reading library.');
       if (user) {
         saveStoryToFirestore(user.uid, editionItem).catch(fsErr => {
           console.warn('[Storage] Firestore cloud save timed out/failed:', fsErr);
-          showToast('⚠️ Saved to session; Firestore cloud write timed out.');
         });
       }
     }
@@ -400,18 +420,32 @@ export default function App() {
     }
 
     const artId = item.articleId || item.id;
-    if (likedItemIds.has(artId)) {
+    if (!artId) return;
+
+    const isCurrentlyLiked = Boolean(
+      (item.articleId && likedItemIds.has(item.articleId)) ||
+      (item.id && likedItemIds.has(item.id))
+    );
+
+    if (isCurrentlyLiked) {
       setLikedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(artId);
+        if (item.articleId) next.delete(item.articleId);
+        if (item.id) next.delete(item.id);
         return next;
       });
       showToast('Like removed.');
     } else {
-      setLikedItemIds(prev => new Set([...prev, artId]));
+      setLikedItemIds(prev => {
+        const next = new Set(prev);
+        if (item.articleId) next.add(item.articleId);
+        if (item.id) next.add(item.id);
+        return next;
+      });
       setDislikedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(artId);
+        if (item.articleId) next.delete(item.articleId);
+        if (item.id) next.delete(item.id);
         return next;
       });
       showToast('Daybreak will feature more stories like this.');
@@ -439,18 +473,32 @@ export default function App() {
     }
 
     const artId = item.articleId || item.id;
-    if (dislikedItemIds.has(artId)) {
+    if (!artId) return;
+
+    const isCurrentlyDisliked = Boolean(
+      (item.articleId && dislikedItemIds.has(item.articleId)) ||
+      (item.id && dislikedItemIds.has(item.id))
+    );
+
+    if (isCurrentlyDisliked) {
       setDislikedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(artId);
+        if (item.articleId) next.delete(item.articleId);
+        if (item.id) next.delete(item.id);
         return next;
       });
       showToast('Dislike removed.');
     } else {
-      setDislikedItemIds(prev => new Set([...prev, artId]));
+      setDislikedItemIds(prev => {
+        const next = new Set(prev);
+        if (item.articleId) next.add(item.articleId);
+        if (item.id) next.add(item.id);
+        return next;
+      });
       setLikedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(artId);
+        if (item.articleId) next.delete(item.articleId);
+        if (item.id) next.delete(item.id);
         return next;
       });
       showToast('Daybreak will reduce stories on this subject.');
@@ -836,8 +884,8 @@ export default function App() {
         onLikeStory={handleLikeStory}
         onDislikeStory={handleDislikeStory}
         onSkipStory={handleSkipStory}
-        isLiked={Boolean(activeStory && likedItemIds.has(activeStory.articleId || activeStory.id))}
-        isDisliked={Boolean(activeStory && dislikedItemIds.has(activeStory.articleId || activeStory.id))}
+        isLiked={Boolean(activeStory && ((activeStory.articleId && likedItemIds.has(activeStory.articleId)) || (activeStory.id && likedItemIds.has(activeStory.id))))}
+        isDisliked={Boolean(activeStory && ((activeStory.articleId && dislikedItemIds.has(activeStory.articleId)) || (activeStory.id && dislikedItemIds.has(activeStory.id))))}
       />
 
       <NewspaperPdfPreviewModal
@@ -860,6 +908,36 @@ export default function App() {
         onClose={() => setShowAuthModal(false)}
         onSignIn={async () => {
           await signInWithGoogle();
+        }}
+        onDemoSignIn={() => {
+          const demoUser = {
+            uid: 'demo-reader-' + Date.now().toString(36),
+            displayName: 'Demo Reader',
+            email: 'demo-reader@daybreak.local',
+          };
+          setUser(demoUser as any);
+          const demoProfile: UserProfile = {
+            id: demoUser.uid,
+            name: demoUser.displayName,
+            email: demoUser.email,
+            readingMinutes: 10,
+            readingDepth: 'Standard',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+            deliveryTime: '07:00',
+            discoveryEnabled: true,
+            explicitTopics: ['Technology', 'Science', 'World', 'Climate & Environment'],
+            specificInterests: ['AI Startups', 'Pakistan cricket'],
+            region: 'Global',
+            learnedPreferences: {},
+            searchSignals: {},
+            likes: [],
+            dislikes: [],
+            skipped: [],
+            onboardingCompleted: true,
+            createdAt: new Date().toISOString(),
+          };
+          setProfile(demoProfile);
+          showToast('Signed in as Demo Reader. All personalized broadsheet features enabled!');
         }}
         reasonMessage={authReason}
       />

@@ -136,7 +136,11 @@ apiRouter.get('/feeds', (req, res) => {
   });
 });
 
-apiRouter.post('/feeds/toggle', (req, res) => {
+apiRouter.post('/feeds/toggle', async (req, res) => {
+  const auth = await getVerifiedUserId(req);
+  if (!auth.isAuthenticated) {
+    return res.status(401).json({ error: 'Unauthorized: Authentication required to manage publisher feeds' });
+  }
   const { id, active } = req.body;
   if (!id) {
     return res.status(400).json({ error: 'Feed id is required' });
@@ -148,7 +152,11 @@ apiRouter.post('/feeds/toggle', (req, res) => {
   res.json({ success: true, feed: updated });
 });
 
-apiRouter.post('/feeds/add', (req, res) => {
+apiRouter.post('/feeds/add', async (req, res) => {
+  const auth = await getVerifiedUserId(req);
+  if (!auth.isAuthenticated) {
+    return res.status(401).json({ error: 'Unauthorized: Authentication required to add publisher feed' });
+  }
   const { name, url, category } = req.body;
   if (!name || !url || !category) {
     return res.status(400).json({ error: 'name, url, and category are required' });
@@ -262,11 +270,20 @@ apiRouter.get('/editions/archive', async (req, res) => {
   res.json({ archive });
 });
 
-apiRouter.get('/editions/:id', (req, res) => {
+apiRouter.get('/editions/:id', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const edition = dbStore.getEdition(req.params.id);
   if (!edition) {
     return res.status(404).json({ error: 'Edition snapshot not found' });
   }
+
+  // Strict ownership verification: private editions can only be accessed by their owner
+  if (edition.userId && edition.userId !== 'guest' && edition.userId !== userId) {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to access this edition snapshot' });
+  }
+
   res.json({ edition });
 });
 
@@ -314,6 +331,11 @@ apiRouter.get('/editions/:id/pdf', async (req, res) => {
 
     if (!edition) {
       return res.status(404).json({ error: 'Edition could not be resolved' });
+    }
+
+    // Strict ownership verification: private editions can only be downloaded by their owner
+    if (edition.userId && edition.userId !== 'guest' && edition.userId !== userId) {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to download this edition PDF' });
     }
 
     let pdfBuffer = pdfCache.get(edition.id);

@@ -19,6 +19,7 @@ import {
   dbSaveEdition,
   dbRecordInteraction,
 } from './supabase.ts';
+import { generateArticleId } from './feeds.ts';
 
 // File-based durable persistence store
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -61,10 +62,36 @@ class StoreManager {
           Object.entries(data.profiles).forEach(([k, v]) => this.profiles.set(k, v));
         }
         if (data.editions) {
-          Object.entries(data.editions).forEach(([k, v]) => this.editions.set(k, v));
+          Object.entries(data.editions).forEach(([k, ed]) => {
+            if (ed && Array.isArray(ed.items)) {
+              const seen = new Set<string>();
+              ed.items.forEach((item, idx) => {
+                const needsRegen = !item.articleId || item.articleId.includes('aHR0cHM') || item.articleId.length < 12 || seen.has(item.articleId);
+                if (needsRegen) {
+                  const prefix = item.articleId?.startsWith('gn') ? 'gn' : 'art';
+                  item.articleId = generateArticleId(prefix, item.sourceUrl || item.id, item.headline);
+                }
+                seen.add(item.articleId);
+                if (!item.id || item.id.includes('undefined')) {
+                  item.id = `item-${ed.editionDate || '2026-10-17'}-${idx + 1}`;
+                }
+              });
+            }
+            this.editions.set(k, ed);
+          });
         }
         if (data.savedArticles) {
-          Object.entries(data.savedArticles).forEach(([k, v]) => this.savedArticles.set(k, v));
+          Object.entries(data.savedArticles).forEach(([k, v]) => {
+            if (Array.isArray(v)) {
+              v.forEach(rec => {
+                if (rec.item && (!rec.item.articleId || rec.item.articleId.includes('aHR0cHM'))) {
+                  rec.item.articleId = generateArticleId('art', rec.item.sourceUrl || rec.item.id, rec.item.headline);
+                  rec.articleId = rec.item.articleId;
+                }
+              });
+            }
+            this.savedArticles.set(k, v);
+          });
         }
         if (data.interactions) {
           Object.entries(data.interactions).forEach(([k, v]) => this.interactions.set(k, v));
