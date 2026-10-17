@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account preferences, delivery settings, and selected topics.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "readingMinutes": { "type": "integer" },
+        "timezone": { "type": "string", "maxLength": 80 },
+        "deliveryTime": { "type": "string", "maxLength": 10 },
+        "discoveryEnabled": { "type": "boolean" },
+        "explicitTopics": { "type": "array" },
+        "specificInterests": { "type": "array" },
+        "learnedPreferences": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "readingMinutes"]
+    },
+    "SavedStory": {
+      "title": "SavedStory",
+      "description": "Bookmarked article stored in reader private library.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "articleId": { "type": "string", "maxLength": 128 },
+        "headline": { "type": "string", "maxLength": 300 },
+        "publisher": { "type": "string", "maxLength": 100 },
+        "section": { "type": "string", "maxLength": 50 },
+        "sourceUrl": { "type": "string", "maxLength": 500 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "publishedAt": { "type": "string", "maxLength": 50 },
+        "briefSummary": { "type": "string", "maxLength": 1500 },
+        "savedAt": { "type": "string", "maxLength": 50 },
+        "item": { "type": "object" }
+      },
+      "required": ["id", "articleId", "headline", "publisher", "sourceUrl"]
+    },
+    "EditionSnapshot": {
+      "title": "EditionSnapshot",
+      "description": "Frozen daily newspaper snapshot belonging to a reader.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "editionDate": { "type": "string", "maxLength": 20 },
+        "formattedDate": { "type": "string", "maxLength": 80 },
+        "headline": { "type": "string", "maxLength": 300 },
+        "revision": { "type": "integer" },
+        "storyCount": { "type": "integer" },
+        "readingTimeMinutes": { "type": "integer" },
+        "status": { "type": "string", "maxLength": 30 },
+        "items": { "type": "array" },
+        "recapTakeaways": { "type": "array" },
+        "reflectionNote": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "editionDate", "headline", "storyCount"]
+    },
+    "Interaction": {
+      "title": "Interaction",
+      "description": "Reader feedback or skip/save interaction event.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "articleId": { "type": "string", "maxLength": 128 },
+        "topic": { "type": "string", "maxLength": 50 },
+        "action": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "articleId", "topic", "action"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Primary user profile document."
+    },
+    "/users/{userId}/savedStories/{storyId}": {
+      "schema": "SavedStory",
+      "description": "User bookmarked articles."
+    },
+    "/users/{userId}/editions/{editionId}": {
+      "schema": "EditionSnapshot",
+      "description": "User immutable daily editions."
+    },
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": "Interaction",
+      "description": "User interaction feedback history."
+    }
+  }
+}

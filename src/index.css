@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-paper: #F7F5EF;
+    --color-paper-light: #FCFAF6;
+    --color-paper-border: #E7E2D6;
+    --color-ink: #252B27;
+    --color-ink-muted: #616962;
+    --color-terracotta: #B65B3D;
+    --color-terracotta-hover: #9D4B31;
+    --color-sage: #7D8B72;
+    --color-sage-light: #EDF2EB;
+  }
+
+  body {
+    background-color: #F7F5EF;
+    color: #252B27;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+  }
+
+  .font-serif {
+    font-family: 'Newsreader', 'Cormorant Garamond', Georgia, serif;
+  }
+
+  .font-sans {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Custom newspaper styling helpers */
+.paper-texture {
+  background-color: #F7F5EF;
+}
+
+.newspaper-rule {
+  border-bottom: 1px solid #E5DFD3;
+}
+
+.newspaper-double-rule {
+  border-top: 2px solid #252B27;
+  border-bottom: 1px solid #252B27;
+  height: 4px;
+}
+
+/* Print optimizations */
+@media print {
+  body {
+    background-color: #ffffff;
+    color: #000000;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

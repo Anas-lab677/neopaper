@@ -1,0 +1,94 @@
+name: Daybreak CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # 1. Continuous Integration (Lint, Deduplication & Ranking Tests, Build)
+  # =========================================================================
+  test-and-build:
+    name: Lint, Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Run Typecheck & Linting
+        run: npm run lint
+
+      - name: Run News Ingestion & Edition Consistency Tests
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: Build Application Bundle
+        run: npm run build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-bundle
+          path: dist/
+          retention-days: 7
+
+  # =========================================================================
+  # 2. Continuous Deployment to Google Cloud Run
+  # =========================================================================
+  deploy-cloud-run:
+    name: Deploy to Cloud Run
+    needs: test-and-build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Cloud Run Credentials
+        id: check-creds
+        run: |
+          if [ -n "${{ secrets.GCP_SA_KEY }}" ]; then
+            echo "has_creds=true" >> $GITHUB_OUTPUT
+            echo "Google Cloud deployment credentials found."
+          else
+            echo "has_creds=false" >> $GITHUB_OUTPUT
+            echo "GCP_SA_KEY is not configured in repository secrets."
+            echo "Skipping automated Cloud Run deployment until GCP service account key is connected."
+          fi
+
+      - name: Authenticate with Google Cloud
+        if: steps.check-creds.outputs.has_creds == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: steps.check-creds.outputs.has_creds == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        if: steps.check-creds.outputs.has_creds == 'true'
+        run: |
+          gcloud run deploy daybreak \
+            --source . \
+            --region asia-southeast1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars NODE_ENV=production \
+            --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest

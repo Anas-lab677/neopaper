@@ -1,0 +1,6 @@
+{
+  "name": "Daybreak — Your Personal Morning Paper",
+  "description": "A calm, finite daily morning newspaper tailored to your curiosity with grounded briefs from verified publisher feeds, reflection ritual, and matching printable PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
