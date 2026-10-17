@@ -218,7 +218,7 @@ export default function App() {
               likes: [],
               dislikes: [],
               skipped: [],
-              onboardingCompleted: false,
+              onboardingCompleted: true,
               createdAt: new Date().toISOString(),
             };
             saveUserProfileToFirestore(currentUser.uid, userProf).catch((fsErr) => {
@@ -236,10 +236,6 @@ export default function App() {
               });
             } catch (e) {
               console.warn('[Auth] Backend profile sync failed:', e);
-            }
-
-            if (!userProf.onboardingCompleted) {
-              setShowOnboarding(true);
             }
           }
 
@@ -908,36 +904,7 @@ export default function App() {
         onClose={() => setShowAuthModal(false)}
         onSignIn={async () => {
           await signInWithGoogle();
-        }}
-        onDemoSignIn={() => {
-          const demoUser = {
-            uid: 'demo-reader-' + Date.now().toString(36),
-            displayName: 'Demo Reader',
-            email: 'demo-reader@daybreak.local',
-          };
-          setUser(demoUser as any);
-          const demoProfile: UserProfile = {
-            id: demoUser.uid,
-            name: demoUser.displayName,
-            email: demoUser.email,
-            readingMinutes: 10,
-            readingDepth: 'Standard',
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-            deliveryTime: '07:00',
-            discoveryEnabled: true,
-            explicitTopics: ['Technology', 'Science', 'World', 'Climate & Environment'],
-            specificInterests: ['AI Startups', 'Pakistan cricket'],
-            region: 'Global',
-            learnedPreferences: {},
-            searchSignals: {},
-            likes: [],
-            dislikes: [],
-            skipped: [],
-            onboardingCompleted: true,
-            createdAt: new Date().toISOString(),
-          };
-          setProfile(demoProfile);
-          showToast('Signed in as Demo Reader. All personalized broadsheet features enabled!');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         reasonMessage={authReason}
       />
