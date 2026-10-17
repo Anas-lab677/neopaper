@@ -3,7 +3,7 @@
 > *“What news matters to you? One calm, finite personal newspaper delivered each morning. Grounded strictly in verified reporting, free from endless feeds.”*
 
 ### 🌐 Application & Deployment
-- **Live Server URL**: [https://looks-edinburgh-vocabulary-announces.trycloudflare.com](https://looks-edinburgh-vocabulary-announces.trycloudflare.com)
+- **Live Server URL**: [https://mid-coding-hiking-separation.trycloudflare.com](https://mid-coding-hiking-separation.trycloudflare.com)
 - **GitHub Repository**: [https://github.com/Anas-lab677/neopaper](https://github.com/Anas-lab677/neopaper)
 - **CI/CD Pipeline**: [GitHub Actions Workflow](https://github.com/Anas-lab677/neopaper/actions) (Typecheck, automated tests, Vite bundle build, Cloud Run deployment)
 - **Cloud Run Service Target**: `daybreak` (Region: `asia-southeast1`)
