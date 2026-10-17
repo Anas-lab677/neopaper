@@ -13,6 +13,41 @@ import {
 
 export const apiRouter = Router();
 
+// In-memory rate limiting map (IP -> count)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(ip: string, limit = 150, windowMs = 60000): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (record.count >= limit) {
+    return false;
+  }
+  record.count += 1;
+  return true;
+}
+
+// Global API rate limiting middleware
+apiRouter.use((req, res, next) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  if (!checkRateLimit(clientIp, 200, 60000)) {
+    return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+  }
+  next();
+});
+
+// Health check endpoint for Cloud Run and orchestrators
+apiRouter.get('/health', (_req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    version: '1.0.0',
+  });
+});
+
 // Derive user ID from Authorization Bearer token or custom header
 const getUserId = (req: any): string => {
   const authHeader = req.headers.authorization || req.headers['authorization'];
@@ -25,7 +60,7 @@ const getUserId = (req: any): string => {
         const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
         const payload = JSON.parse(payloadStr);
         if (payload.user_id || payload.sub) {
-          return (payload.user_id || payload.sub) as string;
+          return String(payload.user_id || payload.sub).slice(0, 128);
         }
       }
     } catch (e) {
@@ -35,8 +70,8 @@ const getUserId = (req: any): string => {
 
   // Fallback to x-user-id header
   const xUserId = req.headers['x-user-id'] as string;
-  if (xUserId && xUserId.trim() && xUserId !== 'undefined' && xUserId !== 'null') {
-    return xUserId.trim();
+  if (xUserId && typeof xUserId === 'string' && xUserId.trim() && xUserId !== 'undefined' && xUserId !== 'null') {
+    return xUserId.trim().replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 128);
   }
 
   return 'guest';
@@ -236,23 +271,66 @@ apiRouter.get('/editions/:id', (req, res) => {
 
 // --- PDF DOWNLOAD & PREVIEW ROUTE ---
 
-apiRouter.get('/editions/:id/pdf', (req, res) => {
-  const edition = dbStore.getEdition(req.params.id);
-  if (!edition) {
-    return res.status(404).json({ error: 'Edition not found' });
-  }
+apiRouter.get('/editions/:id/pdf', async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const userId = getUserId(req);
+    const profile = dbStore.getProfile(userId);
 
-  let pdfBuffer = pdfCache.get(edition.id);
-  if (!pdfBuffer || pdfBuffer.length < 2000) {
-    const profile = dbStore.getProfile(edition.userId);
-    pdfBuffer = generateNewspaperPdf(edition, profile.name || 'Reader');
-    pdfCache.set(edition.id, pdfBuffer);
-  }
+    let edition = dbStore.getEdition(rawId);
 
-  const filename = `daybreak-${edition.editionDate}-rev${edition.revision}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  res.send(pdfBuffer);
+    // If ID is 'today' or 'current', fetch today's edition
+    if (!edition && (rawId === 'today' || rawId === 'current')) {
+      edition = dbStore.getTodayEdition(profile.id);
+      if (!edition) {
+        edition = await buildDailyEdition(profile);
+      }
+    }
+
+    // If ID is formatted as date YYYY-MM-DD
+    if (!edition && /^\d{4}-\d{2}-\d{2}$/.test(rawId)) {
+      edition = dbStore.getTodayEdition(profile.id, rawId);
+    }
+
+    // Check remote Supabase editions if configured
+    if (!edition && isSupabaseConfigured()) {
+      try {
+        const remoteEditions = await dbGetEditions(userId);
+        edition = remoteEditions.find(e => e.id === rawId || e.editionDate === rawId) || null;
+        if (edition) {
+          dbStore.saveEdition(edition);
+        }
+      } catch (dbErr) {
+        console.warn('[PDF Endpoint] Supabase lookup error:', dbErr);
+      }
+    }
+
+    // Fallback: If still not found, resolve or create today's edition
+    if (!edition) {
+      edition = dbStore.getTodayEdition(profile.id) || await buildDailyEdition(profile);
+    }
+
+    if (!edition) {
+      return res.status(404).json({ error: 'Edition could not be resolved' });
+    }
+
+    let pdfBuffer = pdfCache.get(edition.id);
+    if (!pdfBuffer || pdfBuffer.length < 2000) {
+      const readerName = profile.name || 'Reader';
+      pdfBuffer = generateNewspaperPdf(edition, readerName);
+      pdfCache.set(edition.id, pdfBuffer);
+    }
+
+    const filename = `daybreak-${edition.editionDate}-rev${edition.revision || 1}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.end(pdfBuffer);
+  } catch (err: any) {
+    console.error('[PDF Endpoint] Error generating/streaming PDF:', err);
+    return res.status(500).json({ error: 'Failed to generate PDF broadsheet' });
+  }
 });
 
 // --- SAVED & INTERACTIONS ROUTES ---

@@ -70,18 +70,25 @@ export async function signOutUser() {
 // Firestore helpers – User Profile
 // ---------------------------------------------------------------------------
 
-/** Fetch user profile from Firestore. Returns null if not found. */
+// Helper to prevent hanging operations when Firestore is offline or unprovisioned
+function withTimeout<T>(promise: Promise<T>, ms = 1500, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]).catch(() => fallback);
+}
+
+/** Fetch user profile from Firestore. Returns null if not found or timed out. */
 export async function getUserProfileFromFirestore(
   uid: string,
 ): Promise<UserProfile | null> {
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
+    const snap = await withTimeout(getDoc(doc(db, 'users', uid)), 1500, null);
+    if (snap && snap.exists && snap.exists()) {
       return snap.data() as UserProfile;
     }
     return null;
   } catch (err) {
-    console.error('[firebase] getUserProfile error:', err);
     return null;
   }
 }
@@ -107,9 +114,9 @@ export async function saveUserProfileToFirestore(
 ): Promise<void> {
   try {
     const cleaned = cleanForFirestore({ ...profile, updatedAt: new Date().toISOString() });
-    await setDoc(doc(db, 'users', uid), cleaned, { merge: true });
+    await withTimeout(setDoc(doc(db, 'users', uid), cleaned, { merge: true }), 1500, undefined);
   } catch (err) {
-    console.error('[firebase] saveUserProfile error:', err);
+    // Fail silently, profile is persisted in backend/Supabase
   }
 }
 
@@ -124,10 +131,10 @@ export async function getUserSavedStoriesFromFirestore(
   try {
     const colRef = collection(db, 'users', uid, 'savedStories');
     const q = query(colRef, orderBy('savedAt', 'desc'));
-    const snap = await getDocs(q);
+    const snap = await withTimeout(getDocs(q), 1500, null);
+    if (!snap || !snap.docs) return [];
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SavedArticleRecord);
   } catch (err) {
-    console.error('[firebase] getUserSavedStories error:', err);
     return [];
   }
 }
@@ -145,9 +152,9 @@ export async function saveStoryToFirestore(
       item,
       savedAt: new Date().toISOString(),
     };
-    await setDoc(doc(db, 'users', uid, 'savedStories', item.id), record);
+    await withTimeout(setDoc(doc(db, 'users', uid, 'savedStories', item.id), record), 1500, undefined);
   } catch (err) {
-    console.error('[firebase] saveStory error:', err);
+    // Handled in backend/Supabase
   }
 }
 
@@ -157,9 +164,9 @@ export async function removeStoryFromFirestore(
   storyId: string,
 ): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'users', uid, 'savedStories', storyId));
+    await withTimeout(deleteDoc(doc(db, 'users', uid, 'savedStories', storyId)), 1500, undefined);
   } catch (err) {
-    console.error('[firebase] removeStory error:', err);
+    // Handled in backend/Supabase
   }
 }
 
@@ -174,10 +181,10 @@ export async function getUserEditionsFromFirestore(
   try {
     const colRef = collection(db, 'users', uid, 'editions');
     const q = query(colRef, orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
+    const snap = await withTimeout(getDocs(q), 1500, null);
+    if (!snap || !snap.docs) return [];
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Edition);
   } catch (err) {
-    console.error('[firebase] getUserEditions error:', err);
     return [];
   }
 }
@@ -188,8 +195,9 @@ export async function saveEditionToFirestore(
   edition: Edition,
 ): Promise<void> {
   try {
-    await setDoc(doc(db, 'users', uid, 'editions', edition.id), edition);
+    const cleaned = cleanForFirestore(edition);
+    await withTimeout(setDoc(doc(db, 'users', uid, 'editions', edition.id), cleaned), 1500, undefined);
   } catch (err) {
-    console.error('[firebase] saveEdition error:', err);
+    // Handled in backend/Supabase
   }
 }

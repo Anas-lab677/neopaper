@@ -136,7 +136,8 @@ let feedsRegistry: FeedSource[] = [...DEFAULT_FEEDS];
 // In-memory cache for recent feed fetches to avoid rate limits
 let cachedArticles: Article[] = [];
 let lastFetchTimestamp = 0;
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const CACHE_TTL_MS = 8 * 60 * 1000; // 8 minutes feed caching
+const searchResultsCache = new Map<string, { articles: Article[]; timestamp: number }>();
 
 export function sanitizeExcerpt(html: string): string {
   if (!html) return '';
@@ -385,6 +386,12 @@ export async function searchNews(
   query: string,
   interpretation?: QueryInterpretation
 ): Promise<Article[]> {
+  const normKey = query.trim().toLowerCase();
+  const cached = searchResultsCache.get(normKey);
+  if (cached && Date.now() - cached.timestamp < 300000) {
+    return cached.articles;
+  }
+
   const clauses = interpretation?.searchClauses && interpretation.searchClauses.length > 0
     ? interpretation.searchClauses
     : [query];
@@ -472,7 +479,9 @@ export async function searchNews(
   }
 
   // Sort descending by relevance score
-  return deduped.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+  const sorted = deduped.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+  searchResultsCache.set(normKey, { articles: sorted, timestamp: Date.now() });
+  return sorted;
 }
 
 function formatRelevanceReason(

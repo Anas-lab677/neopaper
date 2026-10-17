@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.env*
+*.pem
+*.log
+.git
+.github
+*.md
+.aistudio

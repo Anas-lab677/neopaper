@@ -507,16 +507,30 @@ export default function App() {
   };
 
   // Download PDF
-  const handleDownloadPdf = (editionId?: string, date?: string) => {
-    const targetId = editionId || todayEdition?.id;
-    if (!targetId) return;
+  const handleDownloadPdf = async (editionId?: string, date?: string) => {
+    const targetId = editionId || todayEdition?.id || 'today';
     const downloadUrl = `/api/editions/${targetId}/pdf`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `daybreak-${date || todayEdition?.editionDate || 'edition'}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      showToast('Preparing your authentic broadsheet PDF...');
+      const headers = await getAuthHeaders();
+      const res = await fetch(downloadUrl, { headers });
+      if (!res.ok) {
+        throw new Error(`PDF response ${res.status}`);
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `daybreak-${date || todayEdition?.editionDate || 'edition'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      showToast('Morning broadsheet downloaded successfully.');
+    } catch (err) {
+      console.warn('[PDF] Fetch download error, falling back to window open:', err);
+      window.open(downloadUrl, '_blank');
+    }
   };
 
   // Save personal reflection

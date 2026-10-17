@@ -206,6 +206,8 @@ function buildFallbackBrief(excerpt: string, headline: string, fallbackTopic: To
   };
 }
 
+const queryInterpretationCache = new Map<string, { result: QueryInterpretation; timestamp: number }>();
+
 /**
  * Parses user input to interpret topics, entities, geographic locations, and ambiguities.
  */
@@ -221,6 +223,13 @@ export async function interpretSearchQuery(rawQuery: string): Promise<QueryInter
       summary: 'Please enter what news you would like to follow.',
       isAmbiguous: false,
     };
+  }
+
+  // Check cache first
+  const cacheKey = trimmed.toLowerCase();
+  const cached = queryInterpretationCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 3600000) {
+    return cached.result;
   }
 
   // Rule-based quick extraction fallback
@@ -290,7 +299,7 @@ Extract:
     });
 
     const parsed = JSON.parse(response.text?.trim() || '{}');
-    return {
+    const finalResult: QueryInterpretation = {
       rawQuery: trimmed,
       parsedTopics: parsed.parsedTopics || fallbackInterpretation.parsedTopics,
       parsedEntities: parsed.parsedEntities || fallbackInterpretation.parsedEntities,
@@ -301,8 +310,11 @@ Extract:
       clarificationNote: parsed.clarificationNote || undefined,
       suggestedQueries: parsed.suggestedQueries || fallbackInterpretation.suggestedQueries,
     };
+    queryInterpretationCache.set(cacheKey, { result: finalResult, timestamp: Date.now() });
+    return finalResult;
   } catch (err: any) {
     console.warn('[Gemini] Query interpretation error:', err?.message || err);
+    queryInterpretationCache.set(cacheKey, { result: fallbackInterpretation, timestamp: Date.now() });
     return fallbackInterpretation;
   }
 }
