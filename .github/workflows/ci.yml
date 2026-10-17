@@ -99,6 +99,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          # Attempt enabling necessary APIs
+          gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com || true
+
           SECRET_ARGS=""
           if gcloud secrets describe GEMINI_API_KEY >/dev/null 2>&1; then
             SECRET_ARGS="--set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest"
@@ -106,13 +109,30 @@ jobs:
             SECRET_ARGS="--set-env-vars GEMINI_API_KEY=$GEMINI_API_KEY"
           fi
 
-          gcloud run deploy daybreak \
+          set +e
+          DEPLOY_OUTPUT=$(gcloud run deploy daybreak \
             --source . \
             --region asia-southeast1 \
             --platform managed \
             --allow-unauthenticated \
             --set-env-vars NODE_ENV=production \
-            $SECRET_ARGS
+            $SECRET_ARGS 2>&1)
+          DEPLOY_EXIT=$?
+          set -e
+
+          if [ $DEPLOY_EXIT -ne 0 ]; then
+            echo "## ❌ Cloud Run Deployment Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$DEPLOY_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Troubleshooting:" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Billing:** Verify that Google Cloud Billing is enabled for this project. Cloud Run source builds require an active billing account." >> "$GITHUB_STEP_SUMMARY"
+            echo "- **IAM Roles:** Verify the service account has \`roles/run.admin\`, \`roles/iam.serviceAccountUser\`, \`roles/cloudbuild.builds.editor\`, and \`roles/artifactregistry.admin\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "$DEPLOY_OUTPUT"
+            exit $DEPLOY_EXIT
+          fi
 
           SERVICE_URL=$(gcloud run services describe daybreak --region asia-southeast1 --format='value(status.url)')
           echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
