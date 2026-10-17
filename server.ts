@@ -1,48 +1,45 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { apiRouter } from './server/routes.ts';
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const isProduction = process.env.NODE_ENV === 'production';
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   app.use(express.json());
 
-  // Mount API endpoints
+  // Mount API routes
   app.use('/api', apiRouter);
 
-  // In development, hook Vite middleware for hot development
-  if (process.env.NODE_ENV !== 'production') {
+  if (isProduction) {
+    // Serve built static files in production
+    const distPath = path.resolve(__dirname, 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    // Create Vite dev server in middleware mode for HMR
     const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true',
-      },
+      server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    // In production, serve built frontend assets
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Daybreak Server] Running on http://localhost:${PORT}`);
+    console.log(`\n  🌅 Daybreak server running at:\n`);
+    console.log(`     ➜  Local:   http://0.0.0.0:${PORT}\n`);
   });
 }
 
-startServer().catch(err => {
-  console.error('[Daybreak Server] Startup error:', err);
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
   process.exit(1);
 });

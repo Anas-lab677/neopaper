@@ -1,33 +1,75 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header.tsx';
-import { EditionView } from './components/EditionView.tsx';
-import { ArchiveView } from './components/ArchiveView.tsx';
+import { Footer } from './components/Footer.tsx';
+import { HomeView } from './components/HomeView.tsx';
+import { TodayPaperView } from './components/TodayPaperView.tsx';
+import { SearchResultsView } from './components/SearchResultsView.tsx';
+import { TrendingView } from './components/TrendingView.tsx';
 import { SavedView } from './components/SavedView.tsx';
-import { InterestsView } from './components/InterestsView.tsx';
+import { ArchiveView } from './components/ArchiveView.tsx';
+import { AboutView } from './components/AboutView.tsx';
+import { SettingsView } from './components/SettingsView.tsx';
+import { LegalViews } from './components/LegalViews.tsx';
+import { NotFoundView } from './components/NotFoundView.tsx';
 import { StoryReaderModal } from './components/StoryReaderModal.tsx';
 import { NewspaperPdfPreviewModal } from './components/NewspaperPdfPreviewModal.tsx';
 import { OnboardingModal } from './components/OnboardingModal.tsx';
-import { FeedManagerModal } from './components/FeedManagerModal.tsx';
-import { Edition, EditionItem, SavedArticleRecord, UserProfile } from '../shared/types.ts';
-import { CheckCircle2, RotateCcw } from 'lucide-react';
+import { AuthModal } from './components/AuthModal.tsx';
+import {
+  auth,
+  signInWithGoogle,
+  signOutUser,
+  getUserProfileFromFirestore,
+  saveUserProfileToFirestore,
+  getUserSavedStoriesFromFirestore,
+  saveStoryToFirestore,
+  removeStoryFromFirestore,
+  getUserEditionsFromFirestore,
+  saveEditionToFirestore,
+} from './firebase.ts';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import {
+  Article,
+  Edition,
+  EditionItem,
+  QueryInterpretation,
+  SavedArticleRecord,
+  UserProfile,
+} from '../shared/types.ts';
+import { RotateCcw, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<'today' | 'archive' | 'saved' | 'interests'>('today');
+  const [currentTab, setCurrentTab] = useState<string>('home');
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Content state
   const [todayEdition, setTodayEdition] = useState<Edition | null>(null);
   const [archive, setArchive] = useState<Edition[]>([]);
   const [savedList, setSavedList] = useState<SavedArticleRecord[]>([]);
+  const [savedItemIds, setSavedItemIds] = useState<Set<string>>(new Set());
+  const [trendingArticles, setTrendingArticles] = useState<Article[]>([]);
 
-  // Reader state
-  const [activeStory, setActiveStory] = useState<EditionItem | null>(null);
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showFeedManager, setShowFeedManager] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<Article[]>([]);
+  const [searchInterpretation, setSearchInterpretation] = useState<QueryInterpretation | null>(null);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
 
-  // User actions
+  // Interaction tracking state
+  const [likedItemIds, setLikedItemIds] = useState<Set<string>>(new Set());
+  const [dislikedItemIds, setDislikedItemIds] = useState<Set<string>>(new Set());
   const [skippedItemIds, setSkippedItemIds] = useState<Set<string>>(new Set());
-  const [feedbackMap, setFeedbackMap] = useState<Record<string, 'more' | 'less'>>({});
+
+  // Modals state
+  const [activeStory, setActiveStory] = useState<any | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState<boolean>(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authReason, setAuthReason] = useState<string>('');
+  const [isRefreshingEdition, setIsRefreshingEdition] = useState<boolean>(false);
+
+  // Toast feedback
   const [toast, setToast] = useState<{ message: string; onUndo?: () => void } | null>(null);
 
   const showToast = (message: string, onUndo?: () => void) => {
@@ -37,364 +79,747 @@ export default function App() {
     }, 4500);
   };
 
-  // Initial load
-  const loadInitialData = async () => {
+  // Helper to attach authorization header
+  const getAuthHeaders = useCallback(async () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (auth.currentUser) {
+      try {
+        const token = await auth.currentUser.getIdToken();
+        headers['Authorization'] = `Bearer ${token}`;
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return headers;
+  }, []);
+
+  // Fetch trending articles for home and trending tabs
+  const loadTrending = async () => {
     try {
-      const [profRes, edRes, arcRes, savRes] = await Promise.all([
-        fetch('/api/profile'),
-        fetch('/api/editions/today'),
-        fetch('/api/editions/archive'),
-        fetch('/api/saved'),
-      ]);
-
-      const profData = await profRes.json();
-      const edData = await edRes.json();
-      const arcData = await arcRes.json();
-      const savData = await savRes.json();
-
-      if (profData.profile) setProfile(profData.profile);
-      if (edData.edition) setTodayEdition(edData.edition);
-      if (arcData.archive) setArchive(arcData.archive);
-      if (savData.saved) setSavedList(savData.saved);
+      const res = await fetch('/api/trending');
+      const data = await res.json();
+      if (data.articles) {
+        setTrendingArticles(data.articles);
+      }
     } catch (err) {
-      console.error('Failed to load initial data:', err);
+      console.warn('Failed to load trending articles:', err);
     }
   };
 
+  // Fetch today's edition
+  const loadTodayEdition = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/editions/today', { headers });
+      const data = await res.json();
+      if (data.edition) {
+        setTodayEdition(data.edition);
+      }
+    } catch (err) {
+      console.warn('Failed to load today edition:', err);
+    }
+  };
+
+  // Fetch saved articles
+  const loadSavedArticles = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/saved', { headers });
+      const data = await res.json();
+      if (data.saved) {
+        setSavedList(data.saved);
+        setSavedItemIds(new Set(data.saved.map((s: SavedArticleRecord) => s.articleId || s.id)));
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to load saved from api:', err);
+    }
+
+    if (auth.currentUser) {
+      try {
+        const fsSaved = await getUserSavedStoriesFromFirestore(auth.currentUser.uid);
+        if (fsSaved.length > 0) {
+          setSavedList(fsSaved);
+          setSavedItemIds(new Set(fsSaved.map((s: SavedArticleRecord) => s.articleId || s.id)));
+        }
+      } catch (e) {}
+    }
+  };
+
+  // Fetch edition archive
+  const loadArchive = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/editions/archive', { headers });
+      const data = await res.json();
+      if (data.archive && data.archive.length > 0) {
+        setArchive(data.archive);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to load archive from api:', err);
+    }
+
+    if (auth.currentUser) {
+      try {
+        const fsArchive = await getUserEditionsFromFirestore(auth.currentUser.uid);
+        if (fsArchive.length > 0) {
+          setArchive(fsArchive);
+        }
+      } catch (e) {}
+    }
+  };
+
+  // Initialize and observe Firebase Authentication
   useEffect(() => {
-    loadInitialData();
+    loadTrending();
+
+    const unsubscribe = onAuthStateChanged(auth, async currentUser => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const token = await currentUser.getIdToken();
+
+          let userProf = await getUserProfileFromFirestore(currentUser.uid);
+          
+          // If Firestore didn't have it (e.g. database unprovisioned), check server's persisted store
+          if (!userProf) {
+            try {
+              const res = await fetch('/api/profile', {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              const data = await res.json();
+              if (data.profile && data.profile.createdAt) {
+                userProf = data.profile;
+              }
+            } catch (e) {
+              // Ignore
+            }
+          }
+
+          if (!userProf) {
+            userProf = {
+              id: currentUser.uid,
+              name: currentUser.displayName || 'Reader',
+              email: currentUser.email || undefined,
+              photoURL: currentUser.photoURL || undefined,
+              readingMinutes: 10,
+              readingDepth: 'Standard',
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+              deliveryTime: '07:00',
+              discoveryEnabled: true,
+              explicitTopics: ['Technology', 'Science', 'World', 'Climate & Environment'],
+              specificInterests: [],
+              region: 'Global',
+              learnedPreferences: {},
+              searchSignals: {},
+              likes: [],
+              dislikes: [],
+              skipped: [],
+              onboardingCompleted: false,
+              createdAt: new Date().toISOString(),
+            };
+            await saveUserProfileToFirestore(currentUser.uid, userProf);
+            setShowOnboarding(true);
+
+            await fetch('/api/profile', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify(userProf),
+            });
+          }
+
+          setProfile(userProf);
+
+          loadSavedArticles();
+          loadArchive();
+          loadTodayEdition();
+        } catch (err) {
+          console.error('Error handling auth state:', err);
+        }
+      } else {
+        try {
+          const res = await fetch('/api/profile');
+          const data = await res.json();
+          if (data.profile) {
+            setProfile(data.profile);
+          }
+        } catch (e) {
+          console.warn('Failed to load guest profile:', e);
+        }
+        loadSavedArticles();
+        loadArchive();
+        loadTodayEdition();
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Switch demo reader (Reader A "Sara" vs Reader B "David")
-  const handleSwitchDemo = async (profileId: 'reader-a' | 'reader-b') => {
+  // Search Action
+  const handlePerformSearch = async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    setSearchQuery(trimmed);
+    setCurrentTab('search');
+    setIsSearching(true);
+
     try {
-      setIsRefreshing(true);
-      const res = await fetch('/api/profile/switch-demo', {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId }),
+        headers,
+        body: JSON.stringify({ query: trimmed }),
+      });
+      const data = await res.json();
+      if (data.articles) {
+        setSearchResults(data.articles);
+        setSearchInterpretation(data.interpretation);
+      }
+    } catch (err) {
+      console.error('Search failed:', err);
+      showToast('Search encountered an error. Please try again.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Follow a search interest
+  const handleFollowInterest = async (interest: string) => {
+    if (!user) {
+      setAuthReason('Sign in to follow this interest in tomorrow’s broadsheet edition.');
+      setShowAuthModal(true);
+      return;
+    }
+
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/profile/follow-interest', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ interest }),
       });
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
-        // Refresh today's edition for the new reader profile
-        const edRes = await fetch('/api/editions/today');
-        const edData = await edRes.json();
-        if (edData.edition) setTodayEdition(edData.edition);
-
-        // Refresh archive and saved lists
-        const arcRes = await fetch('/api/editions/archive');
-        const arcData = await arcRes.json();
-        if (arcData.archive) setArchive(arcData.archive);
-
-        const savRes = await fetch('/api/saved');
-        const savData = await savRes.json();
-        if (savData.saved) setSavedList(savData.saved);
-
-        setSkippedItemIds(new Set());
-        setFeedbackMap({});
-        showToast(`Switched demo profile to ${data.profile.name}.`);
-      }
-    } catch (err) {
-      console.error('Failed to switch demo:', err);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  // Regenerate today's edition with latest feedback
-  const handleRefreshEdition = async () => {
-    setIsRefreshing(true);
-    try {
-      const res = await fetch('/api/editions/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isRegeneration: true }),
-      });
-      const data = await res.json();
-      if (data.edition) {
-        setTodayEdition(data.edition);
-        setSkippedItemIds(new Set());
-        showToast('Fresh edition created with your updated signals.');
-      }
-    } catch (err) {
-      console.error('Failed to regenerate edition:', err);
-      showToast('Could not refresh edition. Last saved paper preserved.');
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  // Toggle saving an article
-  const handleToggleSave = async (item: EditionItem) => {
-    try {
-      const res = await fetch(`/api/saved/${item.id}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (data.isSaved) {
-          setSavedList(prev => [
-            {
-              id: `saved-${item.id}`,
-              userId: profile?.id || 'reader-a',
-              articleId: item.articleId,
-              item: { ...item, isSaved: true },
-              savedAt: new Date().toISOString(),
-            },
-            ...prev,
-          ]);
-          showToast(`Saved "${item.headline.slice(0, 32)}..." to your collection.`);
-        } else {
-          setSavedList(prev => prev.filter(s => s.item.id !== item.id));
-          showToast('Removed from saved stories.', () => handleToggleSave(item));
+        if (auth.currentUser) {
+          await saveUserProfileToFirestore(auth.currentUser.uid, {
+            specificInterests: data.profile.specificInterests,
+          });
         }
+        showToast(`Now following "${interest}" in your daily broadsheet.`);
       }
     } catch (err) {
-      console.error('Failed to toggle save:', err);
+      console.error('Failed to follow interest:', err);
     }
   };
 
-  // Skip a story with instant undo option
-  const handleSkipItem = (item: EditionItem) => {
-    setSkippedItemIds(prev => new Set(prev).add(item.id));
-    // Record interaction on server
-    fetch('/api/interactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        articleId: item.articleId,
-        topic: item.section,
-        action: 'skip',
-      }),
-    });
+  // Toggle bookmark save
+  const handleToggleSave = async (item: any) => {
+    const itemId = item.id || item.articleId;
+    const isCurrentlySaved = savedItemIds.has(itemId) || savedItemIds.has(item.articleId);
 
-    showToast(`Skipped "${item.headline.slice(0, 30)}..." from today's paper.`, () => {
+    const editionItem: EditionItem = {
+      id: item.id || `art-${Date.now()}`,
+      articleId: item.articleId || item.id,
+      sortOrder: item.sortOrder || 1,
+      section: item.section || item.topic || 'World',
+      headline: item.headline,
+      briefSummary: item.briefSummary || item.excerpt,
+      takeaways: item.takeaways || [item.excerpt],
+      selectionReason: item.selectionReason || `Saved story from ${item.publisher}`,
+      publisher: item.publisher,
+      sourceUrl: item.sourceUrl || item.canonicalUrl,
+      imageUrl: item.imageUrl,
+      publishedAt: item.publishedAt || new Date().toISOString(),
+    };
+
+    if (isCurrentlySaved) {
+      setSavedItemIds(prev => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        next.delete(editionItem.articleId);
+        return next;
+      });
+      setSavedList(prev => prev.filter(s => s.articleId !== editionItem.articleId && s.id !== itemId));
+      showToast('Removed from saved stories.');
+      if (user) {
+        removeStoryFromFirestore(user.uid, itemId).catch(() => {});
+      }
+    } else {
+      setSavedItemIds(prev => new Set([...prev, itemId, editionItem.articleId]));
+      const newRecord: SavedArticleRecord = {
+        id: itemId,
+        userId: user ? user.uid : 'guest',
+        articleId: editionItem.articleId,
+        item: editionItem,
+        savedAt: new Date().toISOString(),
+      };
+      setSavedList(prev => [newRecord, ...prev]);
+      showToast('Saved to your reading library.');
+      if (user) {
+        saveStoryToFirestore(user.uid, editionItem).catch(() => {});
+      }
+    }
+
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`/api/saved/${itemId}/toggle`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ item: editionItem }),
+      });
+    } catch (e) {
+      console.warn('Failed to toggle save on backend:', e);
+    }
+  };
+
+  // Like / Dislike Feedback (Mutually exclusive & reversible)
+  const handleLikeStory = async (item: any) => {
+    if (!user) {
+      setAuthReason('Sign in to personalize your morning broadsheet with feedback.');
+      setShowAuthModal(true);
+      return;
+    }
+
+    const artId = item.articleId || item.id;
+    if (likedItemIds.has(artId)) {
+      setLikedItemIds(prev => {
+        const next = new Set(prev);
+        next.delete(artId);
+        return next;
+      });
+      showToast('Like removed.');
+    } else {
+      setLikedItemIds(prev => new Set([...prev, artId]));
+      setDislikedItemIds(prev => {
+        const next = new Set(prev);
+        next.delete(artId);
+        return next;
+      });
+      showToast('Daybreak will feature more stories like this.');
+
+      try {
+        const headers = await getAuthHeaders();
+        await fetch('/api/interactions', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            articleId: artId,
+            topic: item.section || item.topic || 'World',
+            action: 'more_like_this',
+          }),
+        });
+      } catch (e) {}
+    }
+  };
+
+  const handleDislikeStory = async (item: any) => {
+    if (!user) {
+      setAuthReason('Sign in to personalize your morning broadsheet with feedback.');
+      setShowAuthModal(true);
+      return;
+    }
+
+    const artId = item.articleId || item.id;
+    if (dislikedItemIds.has(artId)) {
+      setDislikedItemIds(prev => {
+        const next = new Set(prev);
+        next.delete(artId);
+        return next;
+      });
+      showToast('Dislike removed.');
+    } else {
+      setDislikedItemIds(prev => new Set([...prev, artId]));
+      setLikedItemIds(prev => {
+        const next = new Set(prev);
+        next.delete(artId);
+        return next;
+      });
+      showToast('Daybreak will reduce stories on this subject.');
+
+      try {
+        const headers = await getAuthHeaders();
+        await fetch('/api/interactions', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            articleId: artId,
+            topic: item.section || item.topic || 'World',
+            action: 'less_like_this',
+          }),
+        });
+      } catch (e) {}
+    }
+  };
+
+  // Skip Story (with instant Undo)
+  const handleSkipStory = async (item: any) => {
+    const artId = item.id || item.articleId;
+    setSkippedItemIds(prev => new Set([...prev, artId]));
+
+    showToast('Story hidden from today’s edition.', () => {
       setSkippedItemIds(prev => {
         const next = new Set(prev);
-        next.delete(item.id);
+        next.delete(artId);
         return next;
       });
     });
-  };
 
-  // Feedback: More like this / Less like this
-  const handleFeedback = async (item: EditionItem, type: 'more' | 'less') => {
-    const isTogglingOff = feedbackMap[item.id] === type;
-    const newType = isTogglingOff ? null : type;
-
-    setFeedbackMap(prev => ({
-      ...prev,
-      [item.id]: newType as any,
-    }));
-
-    if (newType) {
-      await fetch('/api/interactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          articleId: item.articleId,
-          topic: item.section,
-          action: type === 'more' ? 'more_like_this' : 'less_like_this',
-        }),
-      });
-
-      // Update local profile state
-      const profRes = await fetch('/api/profile');
-      const profData = await profRes.json();
-      if (profData.profile) setProfile(profData.profile);
-
-      showToast(
-        type === 'more'
-          ? `Noted: We'll include more stories like this in upcoming editions.`
-          : `Noted: We'll reduce stories like this in upcoming editions.`
-      );
+    if (user) {
+      try {
+        const headers = await getAuthHeaders();
+        await fetch('/api/interactions', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            articleId: item.articleId || item.id,
+            topic: item.section || item.topic || 'World',
+            action: 'skip',
+          }),
+        });
+      } catch (e) {}
     }
   };
 
-  // Save reflection
+  // Open story reader & log read action
+  const handleOpenReader = (item: any) => {
+    setActiveStory(item);
+    if (user) {
+      getAuthHeaders().then(headers => {
+        fetch('/api/interactions', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            articleId: item.articleId || item.id,
+            topic: item.section || item.topic || 'World',
+            action: 'read',
+          }),
+        }).catch(() => {});
+      });
+    }
+  };
+
+  // Download PDF
+  const handleDownloadPdf = (editionId?: string, date?: string) => {
+    const targetId = editionId || todayEdition?.id;
+    if (!targetId) return;
+    const downloadUrl = `/api/editions/${targetId}/pdf`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `daybreak-${date || todayEdition?.editionDate || 'edition'}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Save personal reflection
   const handleSaveReflection = async (note: string) => {
     if (!todayEdition) return;
     try {
+      const headers = await getAuthHeaders();
       await fetch('/api/reflections', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           editionId: todayEdition.id,
           note,
         }),
       });
       setTodayEdition(prev => (prev ? { ...prev, reflectionNote: note } : prev));
-    } catch (err) {
-      console.error('Failed to save reflection:', err);
+      if (user) {
+        await saveEditionToFirestore(user.uid, {
+          ...todayEdition,
+          reflectionNote: note,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to save reflection:', e);
     }
   };
 
-  // Save profile preferences
-  const handleSaveProfile = async (updates: Partial<UserProfile>) => {
+  // Regenerate today edition explicitly
+  const handleRefreshEdition = async () => {
+    setIsRefreshingEdition(true);
     try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/editions/generate', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ isRegeneration: true }),
+      });
+      const data = await res.json();
+      if (data.edition) {
+        setTodayEdition(data.edition);
+        if (user) {
+          await saveEditionToFirestore(user.uid, data.edition);
+        }
+        showToast('Generated fresh edition with your latest signals.');
+      }
+    } catch (err) {
+      console.error('Regeneration error:', err);
+    } finally {
+      setIsRefreshingEdition(false);
+    }
+  };
+
+  // Update profile
+  const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
+    // Optimistically update local profile state immediately
+    setProfile(prev => (prev ? { ...prev, ...updates } : (updates as UserProfile)));
+    try {
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(updates),
       });
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
-        // Refresh edition to reflect changes
-        await handleRefreshEdition();
+      }
+      if (user) {
+        saveUserProfileToFirestore(user.uid, updates).catch(() => {});
       }
     } catch (err) {
-      console.error('Failed to save profile:', err);
+      console.error('Update profile failed:', err);
     }
   };
 
   // Reset learned preferences
   const handleResetLearning = async () => {
     try {
-      const res = await fetch('/api/profile/reset-learning', { method: 'POST' });
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/profile/reset-learning', {
+        method: 'POST',
+        headers,
+      });
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
-        showToast('Learned preferences reset to baseline. Explicit topics preserved.');
+        if (user) {
+          saveUserProfileToFirestore(user.uid, {
+            learnedPreferences: {},
+            searchSignals: {},
+            likes: [],
+            dislikes: [],
+            skipped: [],
+          }).catch(() => {});
+        }
+        setLikedItemIds(new Set());
+        setDislikedItemIds(new Set());
+        setSkippedItemIds(new Set());
+        showToast('All learned feedback and search signals have been reset.');
       }
     } catch (err) {
-      console.error('Failed to reset learning:', err);
+      console.error('Reset failed:', err);
     }
   };
 
-  // PDF download
-  const handleDownloadPdf = (edition?: Edition) => {
-    const target = edition || todayEdition;
-    if (!target) return;
-    const downloadUrl = `/api/editions/${target.id}/pdf`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `daybreak-${target.editionDate}-rev${target.revision}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast(`Downloading Daybreak PDF for ${target.formattedDate}...`);
-  };
-
-  const savedItemIds = new Set(savedList.map(s => s.item.id));
-
-  return (
-    <div className="min-h-screen bg-[#F7F5EF] text-[#252B27] flex flex-col font-sans selection:bg-[#B65B3D]/20">
-      {/* Top Header */}
-      <Header
-        currentTab={currentTab}
-        onSelectTab={setCurrentTab}
-        profile={profile}
-        onSwitchDemo={handleSwitchDemo}
-        onOpenFeedManager={() => setShowFeedManager(true)}
-        onOpenOnboarding={() => setShowOnboarding(true)}
-      />
-
-      {/* Main View Router */}
-      <main className="flex-1">
-        {currentTab === 'today' && (
-          <EditionView
-            edition={todayEdition}
+  // Navigation route handler
+  const renderCurrentView = () => {
+    switch (currentTab) {
+      case 'home':
+        return (
+          <HomeView
+            onSearch={handlePerformSearch}
+            trendingArticles={trendingArticles}
+            todayEdition={todayEdition}
             profile={profile}
-            onOpenReader={setActiveStory}
+            onSelectTab={setCurrentTab}
+            onOpenReader={handleOpenReader}
             onToggleSave={handleToggleSave}
             savedItemIds={savedItemIds}
-            onSkipItem={handleSkipItem}
+            onOpenPdfPreview={() => setShowPdfPreview(true)}
+            onDownloadPdf={() => handleDownloadPdf()}
+          />
+        );
+
+      case 'today':
+        return (
+          <TodayPaperView
+            edition={todayEdition}
+            profile={profile}
+            onOpenReader={handleOpenReader}
+            onToggleSave={handleToggleSave}
+            savedItemIds={savedItemIds}
+            onSkipItem={handleSkipStory}
             skippedItemIds={skippedItemIds}
-            onFeedback={handleFeedback}
-            feedbackMap={feedbackMap}
+            onLikeStory={handleLikeStory}
+            onDislikeStory={handleDislikeStory}
+            likedItemIds={likedItemIds}
+            dislikedItemIds={dislikedItemIds}
             onRefreshEdition={handleRefreshEdition}
-            isRefreshing={isRefreshing}
+            isRefreshing={isRefreshingEdition}
             onOpenPdfPreview={() => setShowPdfPreview(true)}
             onDownloadPdf={() => handleDownloadPdf()}
             onSaveReflection={handleSaveReflection}
           />
-        )}
+        );
 
-        {currentTab === 'archive' && (
-          <ArchiveView
-            archive={archive}
-            onOpenEdition={edition => {
-              setTodayEdition(edition);
-              setCurrentTab('today');
-            }}
-            onDownloadPdf={handleDownloadPdf}
+      case 'search':
+        return (
+          <SearchResultsView
+            query={searchQuery}
+            interpretation={searchInterpretation}
+            articles={searchResults}
+            isLoading={isSearching}
+            onSearch={handlePerformSearch}
+            onFollowInterest={handleFollowInterest}
+            isFollowingInterest={Boolean(profile?.specificInterests?.includes(searchQuery))}
+            profile={profile}
+            onOpenReader={handleOpenReader}
+            onToggleSave={handleToggleSave}
+            savedItemIds={savedItemIds}
+            onLikeStory={handleLikeStory}
+            onDislikeStory={handleDislikeStory}
+            onSkipStory={handleSkipStory}
+            likedItemIds={likedItemIds}
+            dislikedItemIds={dislikedItemIds}
+            skippedItemIds={skippedItemIds}
           />
-        )}
+        );
 
-        {currentTab === 'saved' && (
+      case 'trending':
+        return (
+          <TrendingView
+            articles={trendingArticles}
+            onOpenReader={handleOpenReader}
+            onToggleSave={handleToggleSave}
+            savedItemIds={savedItemIds}
+          />
+        );
+
+      case 'saved':
+        return (
           <SavedView
             savedList={savedList}
-            onOpenReader={setActiveStory}
+            onOpenReader={handleOpenReader}
             onRemoveSaved={handleToggleSave}
+            onSelectTab={setCurrentTab}
           />
-        )}
+        );
 
-        {currentTab === 'interests' && (
-          <InterestsView
-            profile={profile}
-            onSaveProfile={handleSaveProfile}
-            onResetLearning={handleResetLearning}
+      case 'archive':
+        return (
+          <ArchiveView
+            archive={archive}
+            onOpenEdition={ed => {
+              setTodayEdition(ed);
+              setCurrentTab('today');
+            }}
+            onDownloadEditionPdf={(id, date) => handleDownloadPdf(id, date)}
+            onSelectTab={setCurrentTab}
           />
-        )}
+        );
+
+      case 'about':
+        return <AboutView />;
+
+      case 'settings':
+        return (
+          <SettingsView
+            profile={profile}
+            user={user}
+            onUpdateProfile={handleUpdateProfile}
+            onResetLearning={handleResetLearning}
+            onSignOut={signOutUser}
+            onSelectTab={setCurrentTab}
+          />
+        );
+
+      case 'privacy':
+        return <LegalViews type="privacy" onSelectTab={setCurrentTab} />;
+
+      case 'terms':
+        return <LegalViews type="terms" onSelectTab={setCurrentTab} />;
+
+      default:
+        return <NotFoundView onGoHome={() => setCurrentTab('home')} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FAF9F6] text-[#1C1917] flex flex-col font-sans selection:bg-[#8C2D19] selection:text-[#FAF9F6] animate-page-fade-in">
+      {/* Masthead Header */}
+      <Header
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        profile={profile}
+        user={user}
+        onSignIn={() => {
+          setAuthReason('');
+          setShowAuthModal(true);
+        }}
+        onSignOut={signOutUser}
+        onOpenOnboarding={() => setShowOnboarding(true)}
+      />
+
+      {/* Main View Area */}
+      <main className="flex-1">
+        {renderCurrentView()}
       </main>
 
-      {/* Distraction-Free Story Reader Dialog */}
+      {/* Footer */}
+      <Footer onSelectTab={setCurrentTab} />
+
+      {/* Modals */}
       <StoryReaderModal
         item={activeStory}
         onClose={() => setActiveStory(null)}
         onToggleSave={handleToggleSave}
-        isSaved={activeStory ? savedItemIds.has(activeStory.id) : false}
-        onSkip={handleSkipItem}
-        onFeedback={handleFeedback}
-        currentFeedback={activeStory ? feedbackMap[activeStory.id] : null}
+        isSaved={Boolean(activeStory && (savedItemIds.has(activeStory.id) || savedItemIds.has(activeStory.articleId)))}
+        onLikeStory={handleLikeStory}
+        onDislikeStory={handleDislikeStory}
+        onSkipStory={handleSkipStory}
+        isLiked={Boolean(activeStory && likedItemIds.has(activeStory.articleId || activeStory.id))}
+        isDisliked={Boolean(activeStory && dislikedItemIds.has(activeStory.articleId || activeStory.id))}
       />
 
-      {/* Interactive Newspaper PDF Previewer */}
       <NewspaperPdfPreviewModal
         edition={todayEdition}
-        readerName={profile?.name || 'Reader'}
+        readerName={profile?.name || user?.displayName || 'Reader'}
         isOpen={showPdfPreview}
         onClose={() => setShowPdfPreview(false)}
         onDownloadPdf={() => handleDownloadPdf()}
       />
 
-      {/* 3-Step Onboarding Modal */}
       <OnboardingModal
         isOpen={showOnboarding}
         onClose={() => setShowOnboarding(false)}
+        onComplete={handleUpdateProfile}
         initialProfile={profile}
-        onComplete={async updates => {
-          await handleSaveProfile(updates);
-        }}
       />
 
-      {/* RSS Allowlist & Feed Manager Modal */}
-      <FeedManagerModal
-        isOpen={showFeedManager}
-        onClose={() => setShowFeedManager(false)}
-        onFeedsUpdated={() => {
-          handleRefreshEdition();
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSignIn={async () => {
+          await signInWithGoogle();
         }}
+        reasonMessage={authReason}
       />
 
-      {/* Floating Undo / Success Toast */}
+      {/* Toast Feedback with Undo */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#252B27] text-white px-4 py-3 rounded-lg shadow-xl text-xs flex items-center gap-3 animate-fade-in border border-stone-700">
-          <CheckCircle2 className="w-4 h-4 text-[#7D8B72] shrink-0" />
-          <span className="leading-snug">{toast.message}</span>
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1C1917] text-[#FAF9F6] px-4 py-3 rounded-lg shadow-xl text-xs flex items-center gap-3 border border-[#3E3A36] animate-toast-in">
+          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+          <span>{toast.message}</span>
           {toast.onUndo && (
             <button
               onClick={() => {
                 toast.onUndo?.();
                 setToast(null);
               }}
-              className="ml-2 font-bold text-[#B65B3D] hover:underline flex items-center gap-1 shrink-0"
+              className="ml-2 text-[#FAF9F6] hover:text-[#8C2D19] font-semibold underline flex items-center gap-1 focus:outline-none"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3.5 h-3.5" />
               <span>Undo</span>
             </button>
           )}

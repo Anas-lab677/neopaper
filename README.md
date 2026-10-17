@@ -1,12 +1,50 @@
-# Daybreak — Your Personal Morning Paper
+# Daybreak — Personalized Morning Newspaper & Daily Broadsheet
 
-> *“A little perspective. A world of possibility. Your morning, made personal.”*
+> *“What news matters to you? One calm, finite personal newspaper delivered each morning. Grounded strictly in verified reporting, free from endless feeds.”*
 
-### 🌐 Live Application
-- **Live Preview URL**: [https://ais-pre-l227tx3zr5jrrty2sber6q-964792235520.asia-southeast1.run.app](https://ais-pre-l227tx3zr5jrrty2sber6q-964792235520.asia-southeast1.run.app)
-- **Dev URL**: [https://ais-dev-l227tx3zr5jrrty2sber6q-964792235520.asia-southeast1.run.app](https://ais-dev-l227tx3zr5jrrty2sber6q-964792235520.asia-southeast1.run.app)
+### 🌐 Live Application & Repository
+- **GitHub Repository**: [https://github.com/Anas-lab677/neopaper](https://github.com/Anas-lab677/neopaper)
+- **Live Preview URL**: [https://ais-pre-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app](https://ais-pre-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app)
+- **Dev URL**: [https://ais-dev-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app](https://ais-dev-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app)
 
-Daybreak is a finite, personalized daily morning newspaper web application built for mindful news consumption. Instead of endless social scrolling and algorithmic engagement traps, Daybreak delivers **one dated, bite-sized edition each morning** tailored to your interests and reading budget (5, 10, or 20 minutes), with source-grounded briefs from verified publisher feeds, reflection prompts, and an identical downloadable newspaper-style broadsheet PDF.
+---
+
+## What Daybreak Does
+
+The user types what news they want to follow, for example:
+> *“AI startups, Pakistan cricket, and flooding in Karachi.”*
+
+Daybreak:
+1. **Parses the inquiry**: Extracts distinct subjects, geographic locations (e.g. *Karachi, Pakistan*), and entities (*Pakistan cricket*, *AI startups*). If ambiguous, provides an editable interpretation card.
+2. **Collects real reporting**: Gathers live reporting from supported RSS feeds and Google News search feeds for each clause from verified publishers (e.g. NPR, Dawn, Express Tribune, BBC, Le Monde, NASA).
+3. **Strict anti-hallucination policy**: Generates on-site summaries where the reader learns **three verifiable factual points** directly grounded in the source text. Never invents news merely to satisfy a query; if no trustworthy coverage exists, honestly explains the limitation.
+4. **Delivers one personalized morning broadsheet**: Available to read directly on the website with masthead, "Your Morning in 3" takeaways, lead story, section grid, and an identical downloadable newspaper-style PDF.
+5. **Learns from reader activity**: Search queries, opened articles, bookmarks, likes, dislikes, and skips dynamically refine future ranking without modifying an already saved edition.
+6. **Preserves archives**: Past generated editions and bookmarks remain in a persistent account library.
+
+---
+
+## Interface Layout (From Design Sketches)
+
+### Sketch 1 — Home Page
+- **Daybreak wordmark** at top left with subtle sunrise dot.
+- **Main navigation**: Home, Today's Paper, Trending, Saved, Archive, About.
+- **User avatar / Account button** at top right with Google sign-in/sign-out and preferences dropdown.
+- **Centered headline**: *“What news matters to you?”*
+- **Large search field** with prompt: *“Try ‘AI startups, Pakistan cricket, and floods in Karachi’”* and one-click query pills.
+- **Today's Paper banner**: Quick status, reading time, and direct path to today's broadsheet.
+- **Real trending stories**: Beginning below the hero section with live articles from verified publishers.
+- **Footer**: Working links to Home, Today's Paper, Trending, Saved, Archive, About, Settings, Privacy Policy, Terms & Conditions, and 2026 copyright notice.
+
+### Sketch 2 — Story Results & Paper Area
+- **Left sidebar on desktop**:
+  - In Search Results: Inquiry breakdown (topics, places, entities), editable interpretation form, and "Follow this interest" button.
+  - In Today's Paper: Masthead volume/date, reading time, section shortcuts, reader reflection ritual note, and PDF actions.
+- **Structured responsive grid**:
+  - Story image only if a usable real image is available. If none, strong text-only card.
+  - Section badge, publisher, date, headline in refined editorial serif, grounded brief summary, and relevance reason (*"Why this story?"*).
+  - Controls: Save, Like, Dislike, Skip (with immediate Undo toast), Read full summary modal (with 3 verifiable takeaways), and Original publisher link.
+  - Mobile layout: Gracefully transitions to a single column.
 
 ---
 
@@ -14,249 +52,180 @@ Daybreak is a finite, personalized daily morning newspaper web application built
 
 ```mermaid
 graph TD
-    subgraph Client ["Daybreak Frontend (React 19 + TypeScript)"]
-        UI[Editorial Newsstand UI]
-        Reader[Story Reader Modal]
-        PDFViewer[In-Browser PDF Broadsheet Viewer]
-        Onboarding[3-Step Onboarding Flow]
-        Archive[Immutable Archive & Saved Stories]
+    subgraph Client ["Frontend (React 19 + TypeScript + Tailwind CSS)"]
+        HomeView["Home View (Sketch 1)"]
+        PaperView["Today's Paper View (Sketch 2)"]
+        SearchView["Search Results View (Sketch 2)"]
+        ReaderModal["Story Reader Modal (3 Verifiable Takeaways)"]
+        PDFModal["In-Browser Newspaper PDF Viewer"]
+        AuthSystem["Firebase Auth (Google Sign-In)"]
     end
 
-    subgraph Backend ["Server API (Express + Node.js)"]
-        FeedEngine[RSS Feed Allowlist Collector]
-        RankingEngine[Personalization & Diversity Ranker]
-        GeminiService[Gemini 3.8 Flash Grounding Service]
-        PDFGenerator[jsPDF Broadsheet Generator]
-        StoreAdapter[Dual-Mode Persistence Adapter]
+    subgraph Server ["Backend (Express + Node.js 22)"]
+        Router["API Router (/api/*)"]
+        QueryParser["Query Interpreter (Gemini 3.8 Flash)"]
+        FeedEngine["News Feed Engine & Google News RSS"]
+        Ranker["Relevance & Personalization Ranker"]
+        EditionEngine["Immutable Edition Builder"]
+        PDFEngine["jsPDF Newspaper Broadsheet Generator"]
+        Store["Durable File & Firestore Store"]
     end
 
     subgraph External ["External Services"]
-        Feeds[(Verified RSS Feeds: BBC, Le Monde, NASA)]
-        GeminiAPI[Google Gemini 3.8 Flash]
-        Supabase[(Supabase PostgreSQL + Auth)]
+        GoogleNews["Google News RSS Search Feeds"]
+        PublisherFeeds["Publisher Allowlist (BBC, Le Monde, NASA, etc.)"]
+        GeminiAPI["Google Gemini 3.8 Flash API"]
+        Firestore["Google Cloud Firestore Database"]
     end
 
-    UI -->|HTTP REST| Backend
-    FeedEngine -->|Fetch & Parse XML| Feeds
-    RankingEngine -->|Signals & Scoring| StoreAdapter
-    GeminiService -->|Structured Briefs| GeminiAPI
-    PDFGenerator -->|Binary PDF Stream| PDFViewer
-    StoreAdapter -->|Mirror when configured| Supabase
+    Client -->|Bearer Auth & REST| Router
+    Router --> QueryParser
+    Router --> FeedEngine
+    Router --> Ranker
+    Router --> EditionEngine
+    Router --> PDFEngine
+    Router --> Store
+
+    FeedEngine -->|Live Query| GoogleNews
+    FeedEngine -->|XML Fetch| PublisherFeeds
+    QueryParser -->|Parse & Ground| GeminiAPI
+    EditionEngine -->|Batch Briefs| GeminiAPI
+    Store -->|Sync User State| Firestore
 ```
 
 ---
 
-## Verified RSS Feeds Allowlist
+## Requirements Verification Matrix
 
-Daybreak collects news exclusively from an editable, server-side allowlist of verified publisher RSS and Atom feeds:
-
-1. **World**: BBC News (`https://feeds.bbci.co.uk/news/world/rss.xml`)
-2. **World**: Le Monde in English (`https://www.lemonde.fr/en/international/rss_full.xml`)
-3. **Business**: BBC Business (`https://feeds.bbci.co.uk/news/business/rss.xml`)
-4. **Technology**: BBC Technology (`https://feeds.bbci.co.uk/news/technology/rss.xml`)
-5. **Science**: BBC Science & Environment (`https://feeds.bbci.co.uk/news/science_and_environment/rss.xml`)
-6. **Science & Space**: NASA Breaking News (`https://www.nasa.gov/feed/`)
-7. **Climate & Environment**: Le Monde Environment (`https://www.lemonde.fr/en/environment/rss_full.xml`)
-8. **Culture**: Le Monde Culture (`https://www.lemonde.fr/en/culture/rss_full.xml`)
-9. **Sports**: Le Monde Sports (`https://www.lemonde.fr/en/sports/rss_full.xml`)
-
-Each feed is fetched with bounded 4-second timeouts, XML parsing, HTML entity sanitization, URL deduplication, and error boundaries. If any single publisher feed fails or is blocked, the edition compiles seamlessly from the remaining available feeds.
-
----
-
-## How to Add or Disable a Feed
-
-You can manage feeds dynamically in two ways:
-
-### 1. In the Web UI
-Click the **Feeds & Sources** button in the top navigation bar to open the **Verified Publisher Allowlist** modal:
-- **Disable/Enable**: Click the **Disable / Enable** button on any feed to test error handling or adjust publisher coverage.
-- **Add a Feed**: Enter the publisher name, valid RSS/Atom URL, and category, then click the `+` button.
-
-### 2. Via Server API
-- **List feeds**: `GET /api/feeds`
-- **Toggle feed status**:
-  ```bash
-  curl -X POST http://localhost:3000/api/feeds/toggle \
-    -H "Content-Type: application/json" \
-    -d '{"id": "bbc-tech", "active": false}'
-  ```
-- **Add custom feed**:
-  ```bash
-  curl -X POST http://localhost:3000/api/feeds/add \
-    -H "Content-Type: application/json" \
-    -d '{"name": "Wired News", "url": "https://www.wired.com/feed/rss", "category": "Technology"}'
-  ```
-
----
-
-## Real Data vs. Demo Data
-
-| Component | Status | Data Origin |
+| Requirement | Status | Verification Evidence |
 | :--- | :--- | :--- |
-| **Today's Paper** | **REAL DATA** | Live-fetched and parsed from active RSS feeds (NASA, BBC, Le Monde). |
-| **Grounded Briefs** | **REAL DATA** | Grounded summaries and takeaways generated strictly from source text via **Gemini 3.8 Flash**, with graceful fallback to publisher excerpts if offline or rate-limited. |
-| **Demo Readers** | **DETERMINISTIC FIXTURES** | Two labeled sample reader profiles: **Sara** (Tech/Science/Climate) and **David** (Business/Sports/World) allow immediate comparison. |
-| **Archive** | **HYBRID** | Displays real frozen snapshots generated during reader sessions, seeded with 2 labeled historical editions for immediate inspection. |
-| **PDF Broadsheet** | **REAL DATA** | Vector PDF built dynamically from the exact same frozen `edition_items` snapshot. |
+| **Home Page Layout (Sketch 1)** | **Verified Working** | Centered *"What news matters to you?"*, large input with sample pills, trending stories below, full footer. |
+| **Story Results / Paper Layout (Sketch 2)** | **Verified Working** | Left navigation sidebar on desktop, responsive card grid, real images only, 3-takeaway modal, publisher links, single column mobile. |
+| **Query Parsing & Multi-Interest Search** | **Verified Working** | Parsed *"AI startups, Pakistan cricket, and flooding in Karachi"* into 3 search clauses; retrieved live NPR, Dawn, and Express Tribune articles. |
+| **Ambiguity Handling** | **Verified Working** | Automated Test 1 confirms single-word polysemous queries (e.g. *"Apple"*) produce explanation notes and suggestions. |
+| **Real Relevance Ranking & Geography** | **Verified Working** | Automated Tests 2 & 3 verify cricket fan gets cricket lead and Karachi resident gets local Karachi canals reporting. |
+| **Strict Anti-Hallucination Policy** | **Verified Working** | Zero fabricated news; summaries restricted strictly to source excerpts. Non-matching queries show honest zero-state. |
+| **Personalized Daily Paper & "Morning in 3"** | **Verified Working** | Single daily edition per reader date; 3 source-grounded takeaways; lead story; interest sections; discovery story. |
+| **Edition Immutability** | **Verified Working** | Automated Test 6 verifies that requesting today's paper twice for the same user/date returns the exact same snapshot. |
+| **Learning From Reader Activity** | **Verified Working** | Automated Test 5 verifies likes, skips, and search signals adjust learned topic weights (+0.15 for more_like_this). Settings displays learned signals with reset. |
+| **PDF Generation & Web Consistency** | **Verified Working** | Automated Test 8 generates valid `%PDF-` broadsheet with same stories, takeaways, and clickable publisher links. In-browser preview & download. |
+| **Real Authentication & Isolation** | **Verified Working** | Firebase Google Sign-In with popup, session persistence, Bearer token extraction on server, strict user separation (Automated Test 7). |
+| **Saved Library & Archive** | **Verified Working** | Real bookmark storage in Firestore and server store. Clean empty states for fresh accounts. Past editions load web paper + PDF. |
+| **CI/CD Pipeline** | **Verified Working** | GitHub Actions workflow runs `npm ci`, `npm run lint`, `npm test` (all 8 tests pass), and `npm run build`. |
 
 ---
 
-## Personalization & Learning Model
+## Running the Automated Test Suite
 
-Daybreak uses a transparent, explainable scoring formula:
+Run the comprehensive test suite verifying query parsing, relevance ranking, geography filtering, duplicate removal, feedback learning, edition stability, account separation, and PDF generation:
 
-$$\text{Score} = w_{\text{topic}} \cdot \text{TopicMatch} + w_{\text{kw}} \cdot \text{KeywordMatch} + w_{\text{fresh}} \cdot \text{Recency} + w_{\text{learned}} \cdot \text{FeedbackDelta} - \text{Penalty}_{\text{repeat}}$$
-
-- **Topic Match (+35 pts)**: Reader explicitly subscribes to the category.
-- **Keyword Match (+25 pts)**: Story headline or description contains the reader's specific interest phrases (e.g. *"AI tools"*, *"Space exploration"*).
-- **Recency (+20 pts max)**: Linear decay over 48 hours to prefer breaking developments.
-- **Feedback Learning (+0.3 / -0.3)**:
-  - *"More like this"*: +0.3 delta to category weight.
-  - *"Less like this"*: -0.3 delta to category weight.
-  - *"Save story"*: +0.15 delta to category weight.
-  - *"Skip"*: Hides story immediately with an Undo toast without permanently penalizing the category.
-- **Publisher Diversity Cap**: Restricts any single publisher to $\le 35\%$ of an edition.
-- **Discovery Mode**: If enabled, reserves 1 slot for an engaging story from outside the reader's typical topics.
-
----
-
-## Inngest Scheduled Daily Delivery Setup
-
-To run automated daily edition generation in the background at each reader's preferred morning time (e.g. 7:00 AM in their timezone):
-
-1. **Install Inngest**:
-   ```bash
-   npm install inngest
-   ```
-2. **Define Inngest Function**:
-   ```ts
-   import { Inngest } from 'inngest';
-   import { buildDailyEdition } from './server/editionBuilder.ts';
-   import { dbStore } from './server/store.ts';
-
-   export const inngest = new Inngest({ id: 'daybreak' });
-
-   export const dailyPaperCron = inngest.createFunction(
-     { id: 'generate-daily-editions' },
-     { cron: '0 * * * *' }, // Runs hourly to check due timezones
-     async ({ step }) => {
-       const readers = [dbStore.getProfile('reader-a'), dbStore.getProfile('reader-b')];
-       for (const reader of readers) {
-         await step.run(`build-edition-${reader.id}`, async () => {
-           await buildDailyEdition(reader);
-         });
-       }
-     }
-   );
-   ```
-3. Set `INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` in `.env`.
-*(Note: Manual refresh and creation in the UI works out-of-the-box without requiring Inngest).*
-
----
-
-## Local Development & Setup
-
-### Prerequisites
-- Node.js 20+
-- npm or bun
-
-### 1. Clone & Install
 ```bash
-git clone <repo-url>
-cd daybreak
+npm test
+```
+
+### Output:
+```
+--- STARTING DAYBREAK COMPREHENSIVE AUTOMATED VERIFICATION ---
+
+Test 1: Interest parsing and ambiguity handling...
+✓ PASS: Multi-topic query parsed clauses: [ 'AI startups', 'Pakistan cricket', 'Karachi flooding' ]
+✓ PASS: Ambiguity detected or handled cleanly with note: Daybreak will gather news focused on Apple Inc.
+
+Test 2: Real relevance ranking...
+✓ PASS: Targeted story ranked highest: Pakistan Cricket Team Gears Up For Crucial Tournament
+
+Test 3: Geography affecting selection...
+✓ PASS: Local Karachi reporting ranked #1: Monsoon Preparations Expedited in Karachi as Canals Cleared
+
+Test 4: Duplicate removal...
+✓ PASS: Collapsed 2 duplicate feeds into 1 article.
+
+Test 5: Feedback and learning signals...
+✓ PASS: Technology weight increased from 0.1 to 0.15
+
+Test 6: Edition stability and one edition per user/date...
+✓ PASS: Edition is strictly preserved and immutable for date: 2026-10-17
+
+Test 7: Authentication and account separation...
+✓ PASS: User X and User Y data are completely isolated.
+
+Test 8: Web and PDF content consistency...
+✓ PASS: Generated valid %PDF- document (18611 bytes) consistent with web edition.
+
+================================================================
+ALL 8 COMPREHENSIVE AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY
+================================================================
+```
+
+---
+
+## Local Setup & Development
+
+### 1. Prerequisites
+- Node.js 20 or higher
+- npm 10 or higher
+- Gemini API Key (obtain from Google AI Studio)
+
+### 2. Installation
+```bash
+git clone https://github.com/Anas-lab677/neopaper.git
+cd neopaper
 npm install
 ```
 
-### 2. Environment Configuration
+### 3. Environment Configuration
 Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Add your optional keys:
+Ensure `GEMINI_API_KEY` is configured:
 ```env
-GEMINI_API_KEY="your-gemini-api-key"
-# Optional Supabase integration:
-SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY="your-supabase-key"
+GEMINI_API_KEY="your-google-gemini-api-key"
+PORT=3000
 ```
 
-### 3. Start Full-Stack Dev Server
+### 4. Running the Development Server
 ```bash
 npm run dev
 ```
-Visit `http://localhost:3000` to read today's edition.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 4. Run Automated Verification Tests
+### 5. Production Build & Start
 ```bash
-npx tsx server/tests.ts
+npm run build
+npm start
 ```
 
 ---
 
-## 5-Minute Demo Script (For Judges)
+## Five-Minute Loom Video Walkthrough Outline
 
-1. **Minute 1: The Concept & Problem**
-   - Introduce Daybreak: A calming, finite personal newspaper with a clear beginning and end.
-   - Show the newspaper masthead, issue date, volume, and reading time estimate.
-2. **Minute 2: Personalization Comparison (Sara vs. David)**
-   - Click **Sara** in the top bar: Observe lead story on NASA Space exploration and Climate urban cooling.
-   - Click **David** in the top bar: Observe lead story immediately changes to Global Sports and Business markets.
-3. **Minute 3: Grounded Briefs & Reader Actions**
-   - Click **Read brief →** on any card: Note the concise, factual takeaways and prominent **"Read original article at [Publisher] ↗"** link.
-   - Tap **Save**: Note it appears in the **Saved** tab with instant undo.
-   - Tap **More like this**: View how it updates the **"What your reading is teaching us"** table in **Your interests**.
-4. **Minute 4: The Physical Broadsheet PDF**
-   - Click **Preview newspaper**: Explore the interactive in-browser broadsheet viewer with zoom and page turns.
-   - Click **Download PDF**: Open the downloaded vector PDF; verify stories, ordering, and takeaways match the web edition 1:1.
-5. **Minute 5: Feed Resilience & Reflection**
-   - Scroll to the bottom of Today's paper to see **"Three things to take into today"** and type a private reflection note.
-   - Open **Feeds & Sources**: Disable a feed to prove that the edition still compiles with zero crashes from remaining feeds.
-
----
-
-## Cost & Usage Model
-
-Assuming 1,000 active daily readers:
-- **RSS Collection**: Server fetches 9 feeds once every 30 minutes = ~432 HTTP requests/day (negligible bandwidth).
-- **Gemini Processing**: ~30 unique new articles per day processed via `gemini-3.8-flash`:
-  - 30 articles × 1,000 input tokens = 30k tokens/day.
-  - At standard Gemini 3.8 Flash rates, daily AI cost is under **$0.02 / day**.
-  - Article briefs are cached at the article level and shared across all readers, preventing redundant LLM calls.
-- **Database Storage**: ~1 MB per day for snapshots, easily fitting within Supabase's free tier.
+1. **0:00 – 0:45: The Problem & The Solution**
+   - Show infinite social newsfeeds vs Daybreak's calm broadsheet.
+   - Show Home page (Sketch 1) with masthead date, *"What news matters to you?"*, and the prompt inquiry.
+2. **0:45 – 1:45: Multi-Interest Query & Real News Ingestion**
+   - Type *“AI startups, Pakistan cricket, and flooding in Karachi”*.
+   - Show inquiry breakdown: 3 detected clauses, entities, places (*Karachi, Pakistan*).
+   - Display real live reporting returned from Dawn, NPR, and Express Tribune.
+   - Click "Follow this interest in morning papers".
+3. **1:45 – 2:45: Today's Paper & 3 Verifiable Takeaways**
+   - Open Today's Paper (Sketch 2).
+   - Walk through the left navigation sidebar: Vol/Date, reading time, section shortcuts.
+   - Showcase *"Your Morning in 3"* grounded key takeaways.
+   - Open the Story Reader modal: demonstrate 3 verifiable facts, publisher attribution, and original link.
+4. **2:45 – 3:45: Learning Signals & Newspaper PDF Broadsheet**
+   - Like a story, dislike another, and skip one (demonstrating the instant Undo toast).
+   - Navigate to Settings: show the transparent *"What Daybreak Has Learned About You"* panel displaying updated weights and recent queries.
+   - Click "Preview PDF": showcase the 2-page broadsheet simulation with zoom and download.
+5. **3:45 – 4:30: Archive, Saved Library & Testing**
+   - Show Saved library with real bookmarks.
+   - Show Archive with preserved past editions.
+   - Run `npm test` in the terminal to show all 8 automated tests passing green.
 
 ---
 
-## 🚀 GitHub Repository & CI/CD Pipeline
+## Remaining Setup Tasks for Production Launch
 
-### 1. Connecting to Your Public GitHub Repository
-To link this project to your public GitHub repo:
-```bash
-# 1. Create a public repository on GitHub (e.g. "daybreak")
-# 2. Add the remote and push the verified source code:
-git remote add origin https://github.com/<your-username>/<repo-name>.git
-git branch -M main
-git push -u origin main
-```
-
-### 2. GitHub Actions CI/CD (`.github/workflows/ci.yml`)
-The repository includes a comprehensive GitHub Actions workflow that automatically runs on every push and pull request to `main`:
-
-1. **Continuous Integration (`test-and-build`)**:
-   - Checks syntax and types (`npm run lint`).
-   - Runs automated verification tests (`npm test`) covering feed parsing, news deduplication, and edition snapshot consistency.
-   - Compiles production distribution bundle (`npm run build`).
-2. **Continuous Deployment (`deploy-cloud-run`)**:
-   - Deploys source to Google Cloud Run in `asia-southeast1`.
-   - Injects `GEMINI_API_KEY` from Google Secret Manager / repository secrets.
-
-#### Steps to Activate Automated Cloud Run CD:
-1. In Google Cloud Console, create a Service Account with:
-   - `roles/run.admin`
-   - `roles/iam.serviceAccountUser`
-   - `roles/storage.admin` (for Cloud Build container artifacts)
-2. Generate a Service Account JSON Key.
-3. In your GitHub repository, navigate to **Settings > Secrets and variables > Actions**.
-4. Add a repository secret named **`GCP_SA_KEY`** with the JSON key contents.
-5. Once added, every merged change to `main` automatically runs tests and deploys directly to Cloud Run!
-*(Until `GCP_SA_KEY` is added, the deployment step skips gracefully while the test and build CI runs).*
+1. **Firebase Authorized Domains**: Add your custom production domain to the Firebase Console under **Authentication > Settings > Authorized Domains** so Google Sign-In popup functions on your custom domain.
+2. **Production Gemini Secret**: Ensure `GEMINI_API_KEY` is configured in Google Cloud Secret Manager or Cloud Run Environment Variables.
+3. **Custom News RSS Feeds**: You can add additional niche or regional RSS feeds to the allowlist in `server/feeds.ts` as editorial coverage expands.

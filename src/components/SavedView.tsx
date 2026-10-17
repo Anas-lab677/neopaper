@@ -1,178 +1,179 @@
 import React, { useState } from 'react';
-import { Bookmark, ExternalLink, Trash2, Search, ArrowRight } from 'lucide-react';
+import { Bookmark, ExternalLink, ArrowRight, Trash2, BookOpen } from 'lucide-react';
 import { EditionItem, SavedArticleRecord } from '../../shared/types.ts';
 
 interface SavedViewProps {
   savedList: SavedArticleRecord[];
   onOpenReader: (item: EditionItem) => void;
   onRemoveSaved: (item: EditionItem) => void;
+  onSelectTab: (tab: string) => void;
 }
 
 export const SavedView: React.FC<SavedViewProps> = ({
   savedList,
   onOpenReader,
   onRemoveSaved,
+  onSelectTab,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [topicFilter, setTopicFilter] = useState('all');
+  const [selectedTopic, setSelectedTopic] = useState<string>('all');
 
-  const filtered = savedList.filter(record => {
-    const item = record.item;
-    if (topicFilter !== 'all' && item.section !== topicFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchesTitle = item.headline.toLowerCase().includes(q);
-      const matchesPub = item.publisher.toLowerCase().includes(q);
-      const matchesBrief = item.briefSummary.toLowerCase().includes(q);
-      return matchesTitle || matchesPub || matchesBrief;
-    }
+  const topics: string[] = Array.from(new Set(savedList.map((r: SavedArticleRecord) => String(r.item.section))));
+
+  const filtered = savedList.filter((r: SavedArticleRecord) => {
+    if (selectedTopic !== 'all' && String(r.item.section) !== selectedTopic) return false;
     return true;
   });
 
-  const topics = Array.from(new Set(savedList.map(s => s.item.section)));
-
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8 space-y-8">
       {/* Header */}
-      <div className="border-b border-[#E5DFD3] pb-6 mb-8">
-        <span className="text-xs uppercase tracking-widest text-[#B65B3D] font-bold block mb-1">
-          Saved Stories
-        </span>
-        <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#252B27]">
-          For a <span className="italic font-normal">slower moment.</span>
-        </h1>
-        <p className="text-sm text-[#616962] mt-1">
-          The stories you chose to keep. Saving a story won't change your original editions.
-        </p>
-
-        {/* Search & Topic Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#616962]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search saved stories..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-[#E5DFD3] rounded focus:outline-none focus:border-[#B65B3D]"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => setTopicFilter('all')}
-              className={`px-3 py-1 text-xs rounded transition-colors ${
-                topicFilter === 'all'
-                  ? 'bg-[#B65B3D] text-white font-medium'
-                  : 'bg-white border border-[#E5DFD3] text-[#616962] hover:text-[#252B27]'
-              }`}
-            >
-              All
-            </button>
-            {topics.map(t => (
-              <button
-                key={t}
-                onClick={() => setTopicFilter(t)}
-                className={`px-3 py-1 text-xs rounded transition-colors ${
-                  topicFilter === t
-                    ? 'bg-[#B65B3D] text-white font-medium'
-                    : 'bg-white border border-[#E5DFD3] text-[#616962] hover:text-[#252B27]'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+      <div className="border-b border-[#1C1917] pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <span className="text-xs uppercase tracking-widest text-[#8C2D19] font-semibold">Personal Library</span>
+          <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#1C1917] tracking-tight">
+            Saved Stories & Bookmarks
+          </h1>
+          <p className="text-xs text-[#78716C] mt-1">
+            Articles you have saved from your daily broadsheets and custom inquiries.
+          </p>
         </div>
+
+        {savedList.length > 0 && (
+          <span className="text-xs text-[#78716C]">
+            {savedList.length} {savedList.length === 1 ? 'article' : 'articles'} in your archive
+          </span>
+        )}
       </div>
 
-      {/* Stories list */}
-      {filtered.length > 0 ? (
-        <div className="space-y-4">
+      {/* Filter if multiple sections */}
+      {topics.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs">
+          <button
+            onClick={() => setSelectedTopic('all')}
+            className={`px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${
+              selectedTopic === 'all'
+                ? 'bg-[#1C1917] text-[#FAF9F6] border-[#1C1917] font-medium'
+                : 'bg-[#FFFFFF] border-[#E7E5E4] text-[#78716C] hover:border-[#1C1917]'
+            }`}
+          >
+            All Bookmarks ({savedList.length})
+          </button>
+          {topics.map(t => (
+            <button
+              key={t}
+              onClick={() => setSelectedTopic(t)}
+              className={`px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${
+                selectedTopic === t
+                  ? 'bg-[#1C1917] text-[#FAF9F6] border-[#1C1917] font-medium'
+                  : 'bg-[#FFFFFF] border-[#E7E5E4] text-[#78716C] hover:border-[#1C1917]'
+              }`}
+            >
+              {t} ({savedList.filter(r => String(r.item.section) === t).length})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Empty State for Fresh Real Account */}
+      {savedList.length === 0 ? (
+        <div className="py-24 text-center bg-[#FFFFFF] border border-[#E7E5E4] rounded-lg p-8 max-w-lg mx-auto space-y-4">
+          <div className="w-12 h-12 rounded-full bg-[#FAF9F6] border border-[#D6D3D1] text-[#78716C] flex items-center justify-center mx-auto">
+            <Bookmark className="w-6 h-6" />
+          </div>
+          <h3 className="text-2xl font-serif font-bold text-[#1C1917]">
+            Your library is empty
+          </h3>
+          <p className="text-xs text-[#78716C] leading-relaxed">
+            You haven't bookmarked any stories yet. As you read your daily paper or run inquiries, click the bookmark icon to save articles here for long-term reading.
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={() => onSelectTab('today')}
+              className="px-5 py-2.5 bg-[#1C1917] text-[#FAF9F6] hover:bg-[#8C2D19] rounded text-xs font-medium transition-colors inline-flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Explore Today's Paper</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filtered.map(record => {
             const item = record.item;
             return (
-              <div
+              <article
                 key={record.id}
-                className="bg-white border border-[#E5DFD3] rounded-lg p-5 sm:p-6 shadow-2xs hover:shadow-xs transition-shadow flex flex-col sm:flex-row items-start justify-between gap-5"
+                className="bg-[#FFFFFF] border border-[#E7E5E4] rounded-lg p-5 flex flex-col justify-between hover:border-[#1C1917] transition-all group"
               >
-                {/* Thumbnail if present */}
-                {item.imageUrl && (
-                  <div
-                    onClick={() => onOpenReader(item)}
-                    className="w-full sm:w-36 h-28 rounded overflow-hidden bg-[#E5DFD3]/40 shrink-0 cursor-pointer"
-                  >
-                    <img
-                      src={item.imageUrl}
-                      alt={item.headline}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {item.imageUrl && (
+                    <div className="w-full h-44 overflow-hidden rounded bg-[#FAF9F6] mb-2">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.headline}
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                        loading="lazy"
+                        onError={e => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
 
-                {/* Details */}
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-[#B65B3D] uppercase tracking-wider">
-                    <span>{item.section}</span>
-                    <span className="text-[#E5DFD3]">·</span>
-                    <span className="text-[#616962] font-normal">{item.publisher}</span>
-                    <span className="text-[#E5DFD3]">·</span>
-                    <span className="text-[#616962] font-normal">
-                      Saved {new Date(record.savedAt).toLocaleDateString()}
+                  <div className="flex items-center justify-between text-xs text-[#78716C]">
+                    <span className="font-semibold text-[#8C2D19] uppercase tracking-wider text-[10px]">
+                      {item.section}
                     </span>
+                    <span className="text-[11px] font-medium">{item.publisher}</span>
                   </div>
 
                   <h3
                     onClick={() => onOpenReader(item)}
-                    className="text-lg font-serif font-bold text-[#252B27] hover:text-[#B65B3D] cursor-pointer transition-colors"
+                    className="text-lg font-serif font-bold text-[#1C1917] group-hover:text-[#8C2D19] transition-colors leading-snug cursor-pointer"
                   >
                     {item.headline}
                   </h3>
 
-                  <p className="font-serif text-xs sm:text-sm text-[#252B27] leading-relaxed line-clamp-2">
+                  <p className="text-xs text-[#78716C] line-clamp-3 leading-relaxed">
                     {item.briefSummary}
                   </p>
 
-                  <div className="pt-2 flex items-center gap-4 text-xs font-medium">
+                  <p className="text-[10px] text-[#A8A29E]">
+                    Saved on {new Date(record.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+
+                <div className="pt-4 mt-4 border-t border-[#E7E5E4] flex items-center justify-between text-xs">
+                  <button
+                    onClick={() => onOpenReader(item)}
+                    className="font-medium text-[#1C1917] hover:text-[#8C2D19] flex items-center gap-1"
+                  >
+                    <span>Read summary</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => onOpenReader(item)}
-                      className="text-[#B65B3D] hover:underline flex items-center gap-1"
+                      onClick={() => onRemoveSaved(item)}
+                      className="p-1.5 text-[#78716C] hover:text-[#8C2D19] rounded transition-colors"
+                      title="Remove from bookmarks"
                     >
-                      <span>Read brief →</span>
+                      <Trash2 className="w-4 h-4" />
                     </button>
                     <a
                       href={item.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#616962] hover:text-[#252B27] flex items-center gap-1"
+                      className="p-1.5 text-[#78716C] hover:text-[#1C1917]"
+                      title="Read original at publisher"
                     >
-                      <span>Original reporting</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                 </div>
-
-                {/* Remove action */}
-                <button
-                  onClick={() => onRemoveSaved(item)}
-                  className="p-2 text-[#616962] hover:text-[#B65B3D] self-end sm:self-center transition-colors"
-                  title="Remove from saved stories"
-                >
-                  <Bookmark className="w-5 h-5 fill-current text-[#B65B3D]" />
-                </button>
-              </div>
+              </article>
             );
           })}
-        </div>
-      ) : (
-        <div className="py-20 text-center border border-[#E5DFD3] rounded-lg bg-white/60 max-w-md mx-auto">
-          <Bookmark className="w-10 h-10 text-[#616962] mx-auto mb-3 opacity-30" />
-          <h3 className="font-serif font-bold text-xl text-[#252B27] mb-1">
-            Keep a good story for later.
-          </h3>
-          <p className="text-xs text-[#616962] leading-relaxed px-6 mb-4">
-            Tap the bookmark icon on any story in today's paper. You'll find it here whenever you have time for a slower read.
-          </p>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Article, EditionItem, Topic, UserProfile } from '../shared/types.ts';
+import { Article, Topic, UserProfile } from '../shared/types.ts';
 
 export interface ScoredArticle {
   article: Article;
@@ -18,6 +18,7 @@ export function rankArticlesForProfile(
   for (const article of articles) {
     let score = 0;
     const signals: string[] = [];
+    const combinedText = `${article.headline} ${article.excerpt}`.toLowerCase();
 
     // 1. Explicit topic match (+35 points)
     const isExplicit = profile.explicitTopics.some(t => {
@@ -32,34 +33,56 @@ export function rankArticlesForProfile(
       ) return true;
       return false;
     });
+
     if (isExplicit) {
       score += 35;
       signals.push(`you follow ${article.topic}`);
     }
 
-    // 2. Specific keyword match (+25 points)
-    const combinedText = `${article.headline} ${article.excerpt}`.toLowerCase();
-    const matchedKeywords: string[] = [];
-    for (const kw of profile.specificInterests) {
+    // 2. Specific followed interests match (+30 points)
+    const matchedInterests: string[] = [];
+    for (const kw of profile.specificInterests || []) {
       if (kw.trim() && combinedText.includes(kw.trim().toLowerCase())) {
-        matchedKeywords.push(kw.trim());
+        matchedInterests.push(kw.trim());
       }
     }
-    if (matchedKeywords.length > 0) {
-      score += 25 * Math.min(matchedKeywords.length, 2);
-      signals.push(`matched your interest in "${matchedKeywords.join(', ')}"`);
+    if (matchedInterests.length > 0) {
+      score += 30 * Math.min(matchedInterests.length, 2);
+      signals.push(`matched your followed interest in "${matchedInterests.join(', ')}"`);
     }
 
-    // 3. Recency / Freshness (+20 points max, decays over 48 hours)
+    // 3. Search Signals boost (+15 points for repeated searches)
+    if (profile.searchSignals) {
+      for (const [query, data] of Object.entries(profile.searchSignals)) {
+        if (data.count > 1 && combinedText.includes(query.toLowerCase())) {
+          score += 15;
+          signals.push(`frequently searched "${query}"`);
+          break;
+        }
+      }
+    }
+
+    // 4. Geographic relevance (+25 points if genuinely reporting on user's region/city)
+    if (profile.city && profile.city.trim() && new RegExp(`\\b${profile.city.trim()}\\b`, 'i').test(combinedText)) {
+      score += 25;
+      signals.push(`reporting relevant to ${profile.city}`);
+    } else if (profile.region && profile.region !== 'Global' && profile.region.trim()) {
+      if (new RegExp(`\\b${profile.region.trim()}\\b`, 'i').test(combinedText)) {
+        score += 20;
+        signals.push(`reporting from ${profile.region}`);
+      }
+    }
+
+    // 5. Recency / Freshness (+20 points max, decays over 48 hours)
     const pubTime = new Date(article.publishedAt).getTime();
     const hoursOld = Math.max(0, (now - pubTime) / (1000 * 60 * 60));
     const recencyScore = Math.max(0, 20 * (1 - hoursOld / 48));
     score += recencyScore;
 
-    // 4. Learned preference adjustments (+20 max, -30 min)
-    const learned = profile.learnedPreferences[article.topic];
+    // 6. Learned preference adjustments from feedback (+25 max, -30 min)
+    const learned = profile.learnedPreferences ? profile.learnedPreferences[article.topic] : null;
     if (learned) {
-      const delta = learned.weight * 20;
+      const delta = learned.weight * 25;
       score += delta;
       if (learned.weight > 0.2) {
         signals.push(`growing interest in ${article.topic} based on your feedback`);
@@ -68,11 +91,22 @@ export function rankArticlesForProfile(
       }
     }
 
+    // 7. Likes & Dislikes / Skips
+    if (profile.likes && profile.likes.includes(article.id)) {
+      score += 15;
+    }
+    if (profile.dislikes && profile.dislikes.includes(article.id)) {
+      score -= 40; // Strongly downranked
+    }
+    if (profile.skipped && profile.skipped.includes(article.id)) {
+      score -= 20; // Soft skip penalty
+    }
+
     scored.push({
       article,
       score,
       signals,
-      isDiscovery: !isExplicit,
+      isDiscovery: !isExplicit && matchedInterests.length === 0,
     });
   }
 
@@ -84,7 +118,7 @@ export function rankArticlesForProfile(
   const publisherCounts: Record<string, number> = {};
   const maxPerPublisher = Math.max(2, Math.ceil(targetCount * 0.35));
 
-  // Determine if discovery is enabled and we need a discovery story
+  // Determine if discovery is enabled and pick top discovery story
   let discoveryStory: ScoredArticle | null = null;
   if (profile.discoveryEnabled) {
     const discoveryCandidates = scored.filter(s => s.isDiscovery && s.score > 10);
@@ -98,20 +132,15 @@ export function rankArticlesForProfile(
     if (discoveryStory && item.article.id === discoveryStory.article.id) {
       continue;
     }
-
-    // If discovery is disabled, strictly skip non-explicit topics unless no other articles exist
     if (!profile.discoveryEnabled && item.isDiscovery && profile.explicitTopics.length > 0) {
       continue;
     }
-
     const pubCount = publisherCounts[item.article.publisher] || 0;
     if (pubCount >= maxPerPublisher && selected.length >= 3) {
-      continue; // Skip to enforce publisher variety
+      continue;
     }
-
     selected.push(item);
     publisherCounts[item.article.publisher] = pubCount + 1;
-
     if (selected.length >= (discoveryStory ? targetCount - 1 : targetCount)) {
       break;
     }

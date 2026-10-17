@@ -16,13 +16,23 @@ export interface UserProfile {
   email?: string;
   photoURL?: string;
   readingMinutes: 5 | 10 | 20;
+  readingDepth?: 'Quick' | 'Standard' | 'Deep';
   timezone: string;
   deliveryTime: string; // e.g. '07:00'
   discoveryEnabled: boolean;
   explicitTopics: Topic[];
   specificInterests: string[];
+  region?: string;
+  city?: string;
   learnedPreferences: Record<string, { weight: number; count: number; note: string }>;
+  searchSignals: Record<string, { query: string; count: number; lastSearchedAt: string }>;
+  likes?: string[];
+  dislikes?: string[];
+  skipped?: string[];
+  onboardingCompleted?: boolean;
   isGuest?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Article {
@@ -37,6 +47,9 @@ export interface Article {
   topic: Topic;
   imageUrl?: string;
   attribution?: string;
+  relevanceScore?: number;
+  relevanceReason?: string;
+  matchedEntity?: string;
   isAiBrief?: boolean;
 }
 
@@ -111,6 +124,26 @@ export interface InteractionRecord {
   userId: string;
   articleId: string;
   topic: Topic;
-  action: 'more_like_this' | 'less_like_this' | 'save' | 'skip' | 'read';
+  action: 'more_like_this' | 'less_like_this' | 'save' | 'unsave' | 'skip' | 'read' | 'open';
   timestamp: string;
+}
+
+export interface QueryInterpretation {
+  rawQuery: string;
+  parsedTopics: string[];
+  parsedEntities: string[];
+  parsedPlaces: string[];
+  searchClauses: string[];
+  summary: string;
+  isAmbiguous: boolean;
+  clarificationNote?: string;
+  suggestedQueries?: string[];
+}
+
+export interface SearchResult {
+  query: string;
+  interpretation: QueryInterpretation;
+  articles: Article[];
+  totalFound: number;
+  searchTimeMs: number;
 }

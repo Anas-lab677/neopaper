@@ -1,59 +1,130 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --color-paper: #F7F5EF;
-    --color-paper-light: #FCFAF6;
-    --color-paper-border: #E7E2D6;
-    --color-ink: #252B27;
-    --color-ink-muted: #616962;
-    --color-terracotta: #B65B3D;
-    --color-terracotta-hover: #9D4B31;
-    --color-sage: #7D8B72;
-    --color-sage-light: #EDF2EB;
+/* ===== Page Load Fade-In ===== */
+@keyframes fadeInPage {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
   }
-
-  body {
-    background-color: #F7F5EF;
-    color: #252B27;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    margin: 0;
-    padding: 0;
-  }
-
-  .font-serif {
-    font-family: 'Newsreader', 'Cormorant Garamond', Georgia, serif;
-  }
-
-  .font-sans {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Custom newspaper styling helpers */
-.paper-texture {
-  background-color: #F7F5EF;
+.animate-page-fade-in {
+  animation: fadeInPage 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.newspaper-rule {
-  border-bottom: 1px solid #E5DFD3;
-}
-
-.newspaper-double-rule {
-  border-top: 2px solid #252B27;
-  border-bottom: 1px solid #252B27;
-  height: 4px;
-}
-
-/* Print optimizations */
-@media print {
-  body {
-    background-color: #ffffff;
-    color: #000000;
+/* Staggered children fade-in */
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
   }
-  .no-print {
-    display: none !important;
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ===== Like Heart Pop Animation ===== */
+@keyframes likePop {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.4);
+  }
+  60% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-like-pop {
+  animation: likePop 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ===== Horizontal Auto-Scroll Ticker ===== */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.trending-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 30s linear infinite;
+}
+
+.trending-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* Container mask for smooth edges */
+.trending-ticker-container {
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
+}
+
+/* ===== Toast Slide-In ===== */
+@keyframes toastSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-in {
+  animation: toastSlideIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ===== Section Scroll Reveal ===== */
+@keyframes revealSection {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-reveal {
+  animation: revealSection 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ===== Smooth Scroll Behavior ===== */
+html {
+  scroll-behavior: smooth;
 }

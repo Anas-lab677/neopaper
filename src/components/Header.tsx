@@ -1,13 +1,14 @@
-import React from 'react';
-import { Newspaper, Rss, UserCheck } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { User, LogIn, LogOut, Sliders, Sparkles, BookOpen, ChevronDown } from 'lucide-react';
 import { UserProfile } from '../../shared/types.ts';
 
 interface HeaderProps {
-  currentTab: 'today' | 'archive' | 'saved' | 'interests';
-  onSelectTab: (tab: 'today' | 'archive' | 'saved' | 'interests') => void;
+  currentTab: string;
+  onSelectTab: (tab: string) => void;
   profile: UserProfile | null;
-  onSwitchDemo: (id: 'reader-a' | 'reader-b') => void;
-  onOpenFeedManager: () => void;
+  user: any;
+  onSignIn: () => void;
+  onSignOut: () => void;
   onOpenOnboarding: () => void;
 }
 
@@ -15,123 +16,151 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onSelectTab,
   profile,
-  onSwitchDemo,
-  onOpenFeedManager,
+  user,
+  onSignIn,
+  onSignOut,
   onOpenOnboarding,
 }) => {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const navItems = [
+    { id: 'home', label: 'Home' },
+    { id: 'today', label: "Today's Paper" },
+    { id: 'trending', label: 'Trending' },
+    { id: 'saved', label: 'Saved' },
+    { id: 'archive', label: 'Archive' },
+    { id: 'about', label: 'About' },
+  ];
+
   return (
-    <header className="border-b border-[#E5DFD3] bg-[#F7F5EF] sticky top-0 z-30 px-4 sm:px-8 py-3">
-      <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-        {/* Zone 1: Brand wordmark & Sunrise emblem */}
+    <header className="sticky top-0 z-40 bg-[#FAF9F6]/95 backdrop-blur-md border-b border-[#E7E5E4] px-4 sm:px-8 py-3.5 transition-all">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        {/* Wordmark (Top Left) */}
         <div className="flex items-center gap-3 shrink-0">
           <button
-            onClick={() => onSelectTab('today')}
-            className="flex items-center gap-2.5 text-left group focus:outline-none"
+            onClick={() => onSelectTab('home')}
+            className="flex items-center gap-2 text-left group focus:outline-none"
           >
-            {/* Sunrise emblem */}
-            <div className="w-8 h-8 rounded-full bg-[#B65B3D]/10 flex items-center justify-center text-[#B65B3D] transition-transform group-hover:scale-105">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 4a1 1 0 0 1 1 1v2a1 1 0 0 1-2 0V5a1 1 0 0 1 1-1zm6.364 2.636a1 1 0 0 1 0 1.414l-1.414 1.414a1 1 0 1 1-1.414-1.414l1.414-1.414a1 1 0 0 1 1.414 0zM20 11a1 1 0 0 1 1 1 1 1 0 0 1-1 1h-2a1 1 0 0 1 0-2h2zm-8 4c3.314 0 6 2.686 6 6H6c0-3.314 2.686-6 6-6zm-6.95-6.95a1 1 0 0 1 1.414 0l1.414 1.414a1 1 0 0 1-1.414 1.414L4.05 9.464a1 1 0 0 1 0-1.414zM4 11a1 1 0 0 1 1 1 1 1 0 0 1-1 1H2a1 1 0 0 1 0-2h2z" />
-              </svg>
-            </div>
-            <div>
-              <span className="text-2xl font-serif font-bold tracking-tight text-[#252B27]">
-                daybreak<span className="text-[#B65B3D]">.</span>
-              </span>
-            </div>
+            <span className="text-2xl sm:text-3xl font-serif font-bold tracking-tight text-[#1C1917] group-hover:text-[#8C2D19] transition-colors">
+              daybreak<span className="text-[#8C2D19]">.</span>
+            </span>
+            <span className="hidden lg:inline text-[11px] uppercase tracking-widest text-[#78716C] border-l border-[#D6D3D1] pl-2.5 font-sans font-medium">
+              Morning Broadsheet
+            </span>
           </button>
         </div>
 
-        {/* Zone 2: Navigation Links (Single-line, unboxed) */}
-        <nav className="flex items-center gap-2 sm:gap-6 text-sm font-medium text-[#616962]">
-          <button
-            onClick={() => onSelectTab('today')}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 border-b-2 ${
-              currentTab === 'today'
-                ? 'border-[#B65B3D] text-[#252B27] font-semibold'
-                : 'border-transparent hover:text-[#252B27]'
-            }`}
-          >
-            Today
-          </button>
-          <button
-            onClick={() => onSelectTab('archive')}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 border-b-2 ${
-              currentTab === 'archive'
-                ? 'border-[#B65B3D] text-[#252B27] font-semibold'
-                : 'border-transparent hover:text-[#252B27]'
-            }`}
-          >
-            Archive
-          </button>
-          <button
-            onClick={() => onSelectTab('saved')}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 border-b-2 ${
-              currentTab === 'saved'
-                ? 'border-[#B65B3D] text-[#252B27] font-semibold'
-                : 'border-transparent hover:text-[#252B27]'
-            }`}
-          >
-            Saved
-          </button>
-          <button
-            onClick={() => onSelectTab('interests')}
-            className={`py-1 transition-colors whitespace-nowrap shrink-0 border-b-2 ${
-              currentTab === 'interests'
-                ? 'border-[#B65B3D] text-[#252B27] font-semibold'
-                : 'border-transparent hover:text-[#252B27]'
-            }`}
-          >
-            Your interests
-          </button>
+        {/* Navigation Items */}
+        <nav className="flex items-center gap-1 sm:gap-6 text-sm font-medium text-[#78716C] overflow-x-auto py-1">
+          {navItems.map(item => {
+            const isActive = currentTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onSelectTab(item.id)}
+                className={`px-2 py-1 transition-all whitespace-nowrap text-sm border-b-2 ${
+                  isActive
+                    ? 'border-[#1C1917] text-[#1C1917] font-semibold'
+                    : 'border-transparent hover:text-[#1C1917]'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
-        {/* Zone 3: Actions & Demo Profile Switcher */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Feed Health & Allowlist Manager */}
-          <button
-            onClick={onOpenFeedManager}
-            title="Inspect publisher RSS feeds and status"
-            className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-[#616962] hover:text-[#252B27] border border-[#E5DFD3] rounded bg-white/60 hover:bg-white transition-colors"
-          >
-            <Rss className="w-3.5 h-3.5 text-[#B65B3D]" />
-            <span>Feeds & Sources</span>
-          </button>
+        {/* User Account / Avatar (Top Right) */}
+        <div className="flex items-center gap-3 shrink-0 relative" ref={dropdownRef}>
+          {user ? (
+            <div>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-[#E7E5E4]/50 border border-transparent hover:border-[#D6D3D1] transition-all text-left focus:outline-none"
+                aria-label="User Account"
+              >
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'Reader'}
+                    className="w-7 h-7 rounded-full object-cover border border-[#D6D3D1]"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-[#1C1917] text-[#FAF9F6] text-xs font-semibold flex items-center justify-center">
+                    {(user.displayName || user.email || 'R')[0].toUpperCase()}
+                  </div>
+                )}
+                <span className="hidden sm:inline text-xs font-medium text-[#1C1917] max-w-[120px] truncate">
+                  {user.displayName?.split(' ')[0] || 'Reader'}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-[#78716C]" />
+              </button>
 
-          {/* Quick Demo Switcher (Sara / David) for Judges */}
-          <div className="inline-flex items-center rounded border border-[#E5DFD3] bg-white/80 p-0.5 text-xs">
-            <button
-              onClick={() => onSwitchDemo('reader-a')}
-              className={`px-2 py-1 rounded transition-colors ${
-                profile?.id === 'reader-a'
-                  ? 'bg-[#B65B3D] text-white font-medium shadow-sm'
-                  : 'text-[#616962] hover:text-[#252B27]'
-              }`}
-              title="Reader A: Technology & Science focus"
-            >
-              Sara
-            </button>
-            <button
-              onClick={() => onSwitchDemo('reader-b')}
-              className={`px-2 py-1 rounded transition-colors ${
-                profile?.id === 'reader-b'
-                  ? 'bg-[#B65B3D] text-white font-medium shadow-sm'
-                  : 'text-[#616962] hover:text-[#252B27]'
-              }`}
-              title="Reader B: Business & Sports focus"
-            >
-              David
-            </button>
-          </div>
+              {/* Dropdown Menu */}
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-[#FFFFFF] border border-[#E7E5E4] rounded-lg shadow-lg py-2 z-50 text-xs">
+                  <div className="px-4 py-2 border-b border-[#E7E5E4]">
+                    <p className="font-semibold text-[#1C1917] truncate">{user.displayName || 'Reader'}</p>
+                    <p className="text-[#78716C] truncate">{user.email}</p>
+                  </div>
 
-          {/* Onboarding Restart */}
-          <button
-            onClick={onOpenOnboarding}
-            className="w-8 h-8 rounded-full border border-[#E5DFD3] bg-[#FCFAF6] hover:bg-white flex items-center justify-center text-xs font-serif font-bold text-[#252B27]"
-            title="Account & preferences"
-          >
-            {profile?.name ? profile.name.charAt(0).toUpperCase() : 'S'}
-          </button>
+                  <button
+                    onClick={() => {
+                      onSelectTab('settings');
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-[#1C1917] hover:bg-[#FAF9F6] flex items-center gap-2"
+                  >
+                    <Sliders className="w-4 h-4 text-[#78716C]" />
+                    <span>Settings & Preferences</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onOpenOnboarding();
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-[#1C1917] hover:bg-[#FAF9F6] flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-[#78716C]" />
+                    <span>Adjust News Interests</span>
+                  </button>
+
+                  <div className="border-t border-[#E7E5E4] my-1" />
+
+                  <button
+                    onClick={() => {
+                      onSignOut();
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-[#8C2D19] hover:bg-[#FAF9F6] flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onSignIn}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded bg-[#1C1917] text-[#FAF9F6] hover:bg-[#2C2927] text-xs font-medium transition-colors shadow-xs"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

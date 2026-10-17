@@ -2,9 +2,9 @@ name: Daybreak CI/CD Pipeline
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,7 +28,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Run Typecheck & Linting
         run: npm run lint
@@ -48,3 +48,85 @@ jobs:
           path: dist/
           retention-days: 7
 
+  # =========================================================================
+  # 2. Continuous Deployment to Google Cloud Run
+  # =========================================================================
+  deploy-cloud-run:
+    name: Deploy to Cloud Run
+    needs: test-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Cloud Run Credentials
+        id: check-creds
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$GCP_SA_KEY" ]; then
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+            echo "Google Cloud service account secret found."
+          else
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Deployment Skipped::GCP_SA_KEY secret not found in repository secrets. Deployment skipped."
+            echo "## ⚠️ Deployment Skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Status: SKIPPED (No deployment executed)**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The continuous integration tests and production build completed successfully, but deployment was skipped because repository secret \`GCP_SA_KEY\` is not configured." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "To enable Cloud Run deployment:" >> "$GITHUB_STEP_SUMMARY"
+            echo "1. Go to repository **Settings** -> **Secrets and variables** -> **Actions**." >> "$GITHUB_STEP_SUMMARY"
+            echo "2. Add a new secret named \`GCP_SA_KEY\` containing your Google Cloud Service Account JSON key." >> "$GITHUB_STEP_SUMMARY"
+            echo "3. Ensure the service account has \`roles/run.admin\`, \`roles/iam.serviceAccountUser\`, and Cloud Build / Artifact Registry permissions on a billing-enabled project." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Authenticate with Google Cloud
+        if: steps.check-creds.outputs.has_creds == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: steps.check-creds.outputs.has_creds == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        id: cloud-run-deploy
+        if: steps.check-creds.outputs.has_creds == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          SECRET_ARGS=""
+          if gcloud secrets describe GEMINI_API_KEY >/dev/null 2>&1; then
+            SECRET_ARGS="--set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest"
+          elif [ -n "$GEMINI_API_KEY" ]; then
+            SECRET_ARGS="--set-env-vars GEMINI_API_KEY=$GEMINI_API_KEY"
+          fi
+
+          gcloud run deploy daybreak \
+            --source . \
+            --region asia-southeast1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars NODE_ENV=production \
+            $SECRET_ARGS
+
+          SERVICE_URL=$(gcloud run services describe daybreak --region asia-southeast1 --format='value(status.url)')
+          echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
+          echo "## 🚀 Deployment Succeeded" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Daybreak has been deployed to Google Cloud Run." >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Live URL:** $SERVICE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify Live Service
+        if: steps.check-creds.outputs.has_creds == 'true'
+        run: |
+          URL="${{ steps.cloud-run-deploy.outputs.service_url }}"
+          echo "Verifying live endpoint: $URL"
+          curl -f -s -S "$URL" > /dev/null
+          echo "✓ Public site loaded with HTTP 200 OK"
+          curl -f -s -S "$URL/api/editions/today" > /dev/null
+          echo "✓ Core API responded successfully"

@@ -40,3 +40,7 @@ yarn-error.log*
 *credentials*.json
 delta-*.json
 gcp*.json
+
+# Runtime persistent data and local storage
+data/
+*.pdf
