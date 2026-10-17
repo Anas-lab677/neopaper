@@ -2,10 +2,11 @@
 
 > *“What news matters to you? One calm, finite personal newspaper delivered each morning. Grounded strictly in verified reporting, free from endless feeds.”*
 
-### 🌐 Live Application & Repository
+### 🌐 Application & Deployment
 - **GitHub Repository**: [https://github.com/Anas-lab677/neopaper](https://github.com/Anas-lab677/neopaper)
-- **Live Preview URL**: [https://ais-pre-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app](https://ais-pre-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app)
-- **Dev URL**: [https://ais-dev-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app](https://ais-dev-wfwkogucfeci5kzvh2336o-206379158805.asia-east1.run.app)
+- **CI/CD Pipeline**: [GitHub Actions Workflow](https://github.com/Anas-lab677/neopaper/actions) (Typecheck, automated tests, Vite bundle build, Cloud Run deployment)
+- **Cloud Run Service Target**: `daybreak` (Region: `asia-southeast1`)
+- **Local Live Demo**: Run `npm start` (or `npm.cmd start` on Windows) to launch the unified full-stack server on `http://localhost:3000`.
 
 ---
 

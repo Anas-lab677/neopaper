@@ -67,15 +67,38 @@ export async function signOutUser() {
 }
 
 // ---------------------------------------------------------------------------
-// Firestore helpers – User Profile
+// ---------------------------------------------------------------------------
+// Firestore helpers & Timeout Error Handling
 // ---------------------------------------------------------------------------
 
-// Helper to prevent hanging operations when Firestore is offline or unprovisioned
-function withTimeout<T>(promise: Promise<T>, ms = 1500, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]).catch(() => fallback);
+export class FirestoreTimeoutError extends Error {
+  constructor(operation: string, ms: number) {
+    super(`Firestore operation "${operation}" timed out after ${ms}ms`);
+    this.name = 'FirestoreTimeoutError';
+  }
+}
+
+// Bounded timeout for read operations (returns fallback on timeout to avoid hanging UI)
+function withReadTimeout<T>(promise: Promise<T>, ms = 2000, fallback: T): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeoutPromise])
+    .catch(() => fallback)
+    .finally(() => clearTimeout(timer));
+}
+
+// Strict timeout for write operations: THROWS if operation hangs or fails so callers
+// NEVER treat uncommitted or timed-out writes as success.
+function withWriteTimeout<T>(promise: Promise<T>, ms = 3000, label = 'write'): Promise<T> {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new FirestoreTimeoutError(label, ms)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timer);
+  });
 }
 
 /** Fetch user profile from Firestore. Returns null if not found or timed out. */
@@ -83,7 +106,7 @@ export async function getUserProfileFromFirestore(
   uid: string,
 ): Promise<UserProfile | null> {
   try {
-    const snap = await withTimeout(getDoc(doc(db, 'users', uid)), 1500, null);
+    const snap = await withReadTimeout(getDoc(doc(db, 'users', uid)), 2000, null);
     if (snap && snap.exists && snap.exists()) {
       return snap.data() as UserProfile;
     }
@@ -107,17 +130,13 @@ function cleanForFirestore<T extends Record<string, any>>(obj: T): Record<string
   return result;
 }
 
-/** Save (merge) user profile to Firestore */
+/** Save (merge) user profile to Firestore. Throws on timeout or permission error. */
 export async function saveUserProfileToFirestore(
   uid: string,
   profile: Partial<UserProfile>,
 ): Promise<void> {
-  try {
-    const cleaned = cleanForFirestore({ ...profile, updatedAt: new Date().toISOString() });
-    await withTimeout(setDoc(doc(db, 'users', uid), cleaned, { merge: true }), 1500, undefined);
-  } catch (err) {
-    // Fail silently, profile is persisted in backend/Supabase
-  }
+  const cleaned = cleanForFirestore({ ...profile, updatedAt: new Date().toISOString() });
+  await withWriteTimeout(setDoc(doc(db, 'users', uid), cleaned, { merge: true }), 3000, 'saveUserProfile');
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +150,7 @@ export async function getUserSavedStoriesFromFirestore(
   try {
     const colRef = collection(db, 'users', uid, 'savedStories');
     const q = query(colRef, orderBy('savedAt', 'desc'));
-    const snap = await withTimeout(getDocs(q), 1500, null);
+    const snap = await withReadTimeout(getDocs(q), 2000, null);
     if (!snap || !snap.docs) return [];
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SavedArticleRecord);
   } catch (err) {
@@ -139,35 +158,27 @@ export async function getUserSavedStoriesFromFirestore(
   }
 }
 
-/** Save a story to user's Firestore collection */
+/** Save a story to user's Firestore collection. Throws on timeout or failure. */
 export async function saveStoryToFirestore(
   uid: string,
   item: EditionItem,
 ): Promise<void> {
-  try {
-    const record: SavedArticleRecord = {
-      id: item.id,
-      userId: uid,
-      articleId: item.articleId,
-      item,
-      savedAt: new Date().toISOString(),
-    };
-    await withTimeout(setDoc(doc(db, 'users', uid, 'savedStories', item.id), record), 1500, undefined);
-  } catch (err) {
-    // Handled in backend/Supabase
-  }
+  const record: SavedArticleRecord = {
+    id: item.id,
+    userId: uid,
+    articleId: item.articleId,
+    item,
+    savedAt: new Date().toISOString(),
+  };
+  await withWriteTimeout(setDoc(doc(db, 'users', uid, 'savedStories', item.id), record), 3000, 'saveStory');
 }
 
-/** Remove a story from user's Firestore collection */
+/** Remove a story from user's Firestore collection. Throws on timeout or failure. */
 export async function removeStoryFromFirestore(
   uid: string,
   storyId: string,
 ): Promise<void> {
-  try {
-    await withTimeout(deleteDoc(doc(db, 'users', uid, 'savedStories', storyId)), 1500, undefined);
-  } catch (err) {
-    // Handled in backend/Supabase
-  }
+  await withWriteTimeout(deleteDoc(doc(db, 'users', uid, 'savedStories', storyId)), 3000, 'removeStory');
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +192,7 @@ export async function getUserEditionsFromFirestore(
   try {
     const colRef = collection(db, 'users', uid, 'editions');
     const q = query(colRef, orderBy('createdAt', 'desc'));
-    const snap = await withTimeout(getDocs(q), 1500, null);
+    const snap = await withReadTimeout(getDocs(q), 2000, null);
     if (!snap || !snap.docs) return [];
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Edition);
   } catch (err) {
@@ -189,15 +200,11 @@ export async function getUserEditionsFromFirestore(
   }
 }
 
-/** Save an edition to user's Firestore collection */
+/** Save an edition to user's Firestore collection. Throws on timeout or failure. */
 export async function saveEditionToFirestore(
   uid: string,
   edition: Edition,
 ): Promise<void> {
-  try {
-    const cleaned = cleanForFirestore(edition);
-    await withTimeout(setDoc(doc(db, 'users', uid, 'editions', edition.id), cleaned), 1500, undefined);
-  } catch (err) {
-    // Handled in backend/Supabase
-  }
+  const cleaned = cleanForFirestore(edition);
+  await withWriteTimeout(setDoc(doc(db, 'users', uid, 'editions', edition.id), cleaned), 3000, 'saveEdition');
 }

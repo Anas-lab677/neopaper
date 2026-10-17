@@ -196,8 +196,29 @@ async function runVerificationTests() {
   assert.ok(headerStr.startsWith('%PDF-'), 'Buffer must begin with %PDF- signature');
   console.log(`✓ PASS: Generated valid %PDF- document (${pdfBuffer.length} bytes) consistent with web edition.`);
 
+  // Test 9: Verified Backend Identity & Elimination of x-user-id Spoofing
+  console.log('\nTest 9: Verified backend identity and elimination of x-user-id spoofing...');
+  const { verifyFirebaseIdToken, getVerifiedUserId } = await import('./auth.ts');
+  
+  // 9a: Forged or malformed token must be rejected
+  const malformedRes = await verifyFirebaseIdToken('eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiJ9.');
+  assert.strictEqual(malformedRes.isAuthenticated, false, 'Forged token must not authenticate');
+  assert.strictEqual(malformedRes.userId, 'guest', 'Unverified token must resolve to guest');
+
+  // 9b: Spoofed x-user-id header must be completely ignored
+  const spoofReq = {
+    headers: {
+      'x-user-id': 'admin-judge-account',
+      'authorization': 'Bearer fake-invalid-jwt-token',
+    },
+  };
+  const spoofAuth = await getVerifiedUserId(spoofReq);
+  assert.strictEqual(spoofAuth.isAuthenticated, false, 'Spoof token must not authenticate');
+  assert.strictEqual(spoofAuth.userId, 'guest', 'x-user-id header must be rejected and ignored');
+  console.log('✓ PASS: Cryptographic token verification strictly rejects malformed tokens and eliminates x-user-id fallback.');
+
   console.log('\n================================================================');
-  console.log('ALL 8 COMPREHENSIVE AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY');
+  console.log('ALL 9 COMPREHENSIVE AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY');
   console.log('================================================================');
 }
 

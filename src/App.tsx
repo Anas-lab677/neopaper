@@ -350,7 +350,10 @@ export default function App() {
       setSavedList(prev => prev.filter(s => s.articleId !== editionItem.articleId && s.id !== itemId));
       showToast('Removed from saved stories.');
       if (user) {
-        removeStoryFromFirestore(user.uid, itemId).catch(() => {});
+        removeStoryFromFirestore(user.uid, itemId).catch(fsErr => {
+          console.warn('[Storage] Firestore cloud remove timed out/failed:', fsErr);
+          showToast('⚠️ Removed from session; Firestore cloud write timed out.');
+        });
       }
     } else {
       setSavedItemIds(prev => new Set([...prev, itemId, editionItem.articleId]));
@@ -364,19 +367,27 @@ export default function App() {
       setSavedList(prev => [newRecord, ...prev]);
       showToast('Saved to your reading library.');
       if (user) {
-        saveStoryToFirestore(user.uid, editionItem).catch(() => {});
+        saveStoryToFirestore(user.uid, editionItem).catch(fsErr => {
+          console.warn('[Storage] Firestore cloud save timed out/failed:', fsErr);
+          showToast('⚠️ Saved to session; Firestore cloud write timed out.');
+        });
       }
     }
 
     try {
       const headers = await getAuthHeaders();
-      await fetch(`/api/saved/${itemId}/toggle`, {
+      const res = await fetch(`/api/saved/${itemId}/toggle`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ item: editionItem }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        showToast(`⚠️ Server save warning: ${errData.error || 'Database write rejected'}`);
+      }
     } catch (e) {
       console.warn('Failed to toggle save on backend:', e);
+      showToast('⚠️ Could not connect to backend server for permanent save.');
     }
   };
 
@@ -587,6 +598,11 @@ export default function App() {
   const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
     // Optimistically update local profile state immediately
     setProfile(prev => (prev ? { ...prev, ...updates } : (updates as UserProfile)));
+
+    let backendOk = false;
+    let firestoreOk = false;
+    let errorMessage = '';
+
     try {
       const headers = await getAuthHeaders();
       const res = await fetch('/api/profile', {
@@ -594,15 +610,37 @@ export default function App() {
         headers,
         body: JSON.stringify(updates),
       });
-      const data = await res.json();
-      if (data.profile) {
-        setProfile(data.profile);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.profile) {
+          setProfile(data.profile);
+          backendOk = true;
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        errorMessage = data.error || 'Server rejected updates';
       }
-      if (user) {
-        saveUserProfileToFirestore(user.uid, updates).catch(() => {});
-      }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Update profile failed:', err);
+      errorMessage = err.message || 'Connection error';
+    }
+
+    if (user) {
+      try {
+        await saveUserProfileToFirestore(user.uid, updates);
+        firestoreOk = true;
+      } catch (fsErr) {
+        console.warn('[Storage] Firestore profile write failed:', fsErr);
+      }
+    }
+
+    if (!backendOk && user && !firestoreOk) {
+      showToast(`⚠️ Preferences not saved: ${errorMessage || 'Database write failed'}`);
+      throw new Error(errorMessage || 'Failed to persist preferences');
+    } else if (user && !firestoreOk) {
+      showToast('⚠️ Preferences saved to server; Firestore cloud write timed out.');
+    } else {
+      showToast('Preferences saved successfully.');
     }
   };
 
@@ -618,13 +656,18 @@ export default function App() {
       if (data.profile) {
         setProfile(data.profile);
         if (user) {
-          saveUserProfileToFirestore(user.uid, {
-            learnedPreferences: {},
-            searchSignals: {},
-            likes: [],
-            dislikes: [],
-            skipped: [],
-          }).catch(() => {});
+          try {
+            await saveUserProfileToFirestore(user.uid, {
+              learnedPreferences: {},
+              searchSignals: {},
+              likes: [],
+              dislikes: [],
+              skipped: [],
+            });
+          } catch (fsErr) {
+            console.warn('[Storage] Firestore reset failed:', fsErr);
+            showToast('⚠️ Reset on server; Firestore cloud write timed out.');
+          }
         }
         setLikedItemIds(new Set());
         setDislikedItemIds(new Set());
@@ -633,6 +676,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Reset failed:', err);
+      showToast('⚠️ Failed to reset preferences. Please try again.');
     }
   };
 

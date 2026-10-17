@@ -48,34 +48,17 @@ apiRouter.get('/health', (_req, res) => {
   });
 });
 
-// Derive user ID from Authorization Bearer token or custom header
-const getUserId = (req: any): string => {
-  const authHeader = req.headers.authorization || req.headers['authorization'];
-  if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice(7).trim();
-    try {
-      // Decode JWT payload without external library to extract standard Firebase UID ('sub' / 'user_id')
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
-        const payload = JSON.parse(payloadStr);
-        if (payload.user_id || payload.sub) {
-          return String(payload.user_id || payload.sub).slice(0, 128);
-        }
-      }
-    } catch (e) {
-      // Fallback
-    }
-  }
+import { getVerifiedUserId } from './auth.ts';
 
-  // Fallback to x-user-id header
-  const xUserId = req.headers['x-user-id'] as string;
-  if (xUserId && typeof xUserId === 'string' && xUserId.trim() && xUserId !== 'undefined' && xUserId !== 'null') {
-    return xUserId.trim().replace(/[^a-zA-Z0-9_\-\.]/g, '').slice(0, 128);
+// Helper to extract verified user ID or return 401 if a provided token is invalid
+async function requireAuthOrGuest(req: any, res: any): Promise<string | null> {
+  const auth = await getVerifiedUserId(req);
+  if (req.headers.authorization && !auth.isAuthenticated) {
+    res.status(401).json({ error: 'Invalid or expired Firebase ID token', details: auth.error });
+    return null;
   }
-
-  return 'guest';
-};
+  return auth.userId;
+}
 
 // --- SEARCH & INTERPRETATION ROUTES ---
 
@@ -101,7 +84,9 @@ apiRouter.post('/search', async (req, res) => {
       return res.status(400).json({ error: 'Search query is required' });
     }
 
-    const userId = getUserId(req);
+    const userId = await requireAuthOrGuest(req, res);
+    if (!userId) return;
+
     // Learn from the search if user is logged in
     if (userId !== 'guest') {
       dbStore.recordSearchSignal(userId, query);
@@ -180,7 +165,9 @@ apiRouter.post('/feeds/add', (req, res) => {
 // --- PROFILE & PERSONALIZATION ROUTES ---
 
 apiRouter.get('/profile', async (req, res) => {
-  const userId = getUserId(req);
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   let profile = dbStore.getProfile(userId);
   if (isSupabaseConfigured()) {
     const remote = await dbGetProfile(userId);
@@ -192,15 +179,19 @@ apiRouter.get('/profile', async (req, res) => {
   res.json({ profile });
 });
 
-apiRouter.put('/profile', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.put('/profile', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const updates = req.body;
   const profile = dbStore.updateProfile(userId, updates);
   res.json({ success: true, profile });
 });
 
-apiRouter.post('/profile/follow-interest', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/profile/follow-interest', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const { interest } = req.body;
   if (!interest || typeof interest !== 'string') {
     return res.status(400).json({ error: 'Interest string is required' });
@@ -209,8 +200,10 @@ apiRouter.post('/profile/follow-interest', (req, res) => {
   res.json({ success: true, profile });
 });
 
-apiRouter.post('/profile/unfollow-interest', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/profile/unfollow-interest', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const { interest } = req.body;
   if (!interest || typeof interest !== 'string') {
     return res.status(400).json({ error: 'Interest string is required' });
@@ -219,8 +212,10 @@ apiRouter.post('/profile/unfollow-interest', (req, res) => {
   res.json({ success: true, profile });
 });
 
-apiRouter.post('/profile/reset-learning', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/profile/reset-learning', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const profile = dbStore.resetLearnedPreferences(userId);
   res.json({ success: true, profile });
 });
@@ -229,7 +224,9 @@ apiRouter.post('/profile/reset-learning', (req, res) => {
 
 apiRouter.get('/editions/today', async (req, res) => {
   try {
-    const userId = getUserId(req);
+    const userId = await requireAuthOrGuest(req, res);
+    if (!userId) return;
+
     const profile = dbStore.getProfile(userId);
     let edition = dbStore.getTodayEdition(profile.id);
     if (!edition) {
@@ -244,7 +241,9 @@ apiRouter.get('/editions/today', async (req, res) => {
 
 apiRouter.post('/editions/generate', async (req, res) => {
   try {
-    const userId = getUserId(req);
+    const userId = await requireAuthOrGuest(req, res);
+    if (!userId) return;
+
     const profile = req.body.profile || dbStore.getProfile(userId);
     const isRegeneration = Boolean(req.body.isRegeneration);
     const edition = await buildDailyEdition(profile, { isRegeneration });
@@ -255,8 +254,10 @@ apiRouter.post('/editions/generate', async (req, res) => {
   }
 });
 
-apiRouter.get('/editions/archive', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.get('/editions/archive', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const archive = dbStore.getEditionArchive(userId);
   res.json({ archive });
 });
@@ -274,9 +275,10 @@ apiRouter.get('/editions/:id', (req, res) => {
 apiRouter.get('/editions/:id/pdf', async (req, res) => {
   try {
     const rawId = req.params.id;
-    const userId = getUserId(req);
-    const profile = dbStore.getProfile(userId);
+    const userId = await requireAuthOrGuest(req, res);
+    if (!userId) return;
 
+    const profile = dbStore.getProfile(userId);
     let edition = dbStore.getEdition(rawId);
 
     // If ID is 'today' or 'current', fetch today's edition
@@ -336,7 +338,9 @@ apiRouter.get('/editions/:id/pdf', async (req, res) => {
 // --- SAVED & INTERACTIONS ROUTES ---
 
 apiRouter.get('/saved', async (req, res) => {
-  const userId = getUserId(req);
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   let saved = dbStore.getSavedArticles(userId);
   if (saved.length === 0 && isSupabaseConfigured()) {
     const remote = await dbGetSavedStories(userId);
@@ -347,8 +351,10 @@ apiRouter.get('/saved', async (req, res) => {
   res.json({ saved });
 });
 
-apiRouter.post('/saved/:id/toggle', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/saved/:id/toggle', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const { item } = req.body;
   if (!item) {
     return res.status(400).json({ error: 'Edition item is required' });
@@ -357,8 +363,10 @@ apiRouter.post('/saved/:id/toggle', (req, res) => {
   res.json({ success: true, isSaved: result.isSaved });
 });
 
-apiRouter.post('/interactions', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/interactions', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const { articleId, topic, action } = req.body;
   if (!articleId || !topic || !action) {
     return res.status(400).json({ error: 'articleId, topic, and action are required' });
@@ -369,8 +377,10 @@ apiRouter.post('/interactions', (req, res) => {
   res.json({ success: true });
 });
 
-apiRouter.post('/reflections', (req, res) => {
-  const userId = getUserId(req);
+apiRouter.post('/reflections', async (req, res) => {
+  const userId = await requireAuthOrGuest(req, res);
+  if (!userId) return;
+
   const { editionId, note } = req.body;
   if (!editionId || typeof note !== 'string') {
     return res.status(400).json({ error: 'editionId and note are required' });
